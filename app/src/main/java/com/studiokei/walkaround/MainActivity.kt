@@ -60,10 +60,20 @@ fun WalkaroundApp() {
         }
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            Greeting(
-                name = "Android",
-                modifier = Modifier.padding(innerPadding)
-            )
+            when (currentDestination) {
+                AppDestinations.HOME -> Greeting(
+                    name = "Home",
+                    modifier = Modifier.padding(innerPadding)
+                )
+                AppDestinations.FAVORITES -> Greeting(
+                    name = "お気に入り",
+                    modifier = Modifier.padding(innerPadding)
+                )
+                AppDestinations.PROFILE -> Greeting(
+                    name = "Profile",
+                    modifier = Modifier.padding(innerPadding)
+                )
+            }
         }
     }
 }
@@ -80,7 +90,7 @@ enum class AppDestinations(
 @Composable
 fun Greeting(name: String, modifier: Modifier = Modifier) {
     Text(
-        text = "Hello $name!",
+        text = name,
         modifier = modifier
     )
 }
