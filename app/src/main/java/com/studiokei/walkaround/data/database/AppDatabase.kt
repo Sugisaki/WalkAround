@@ -11,7 +11,7 @@ import com.studiokei.walkaround.data.model.TrackPoint
 
 @Database(
     entities = [Settings::class, TrackPoint::class, Section::class, StepSegment::class],
-    version = 2,
+    version = 3, // Sectionのプロパティを nullable に
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,7 +30,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "app_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration() // スキーマ変更時にデータを破棄して再作成
+                .build()
                 INSTANCE = instance
                 instance
             }

@@ -17,6 +17,6 @@ data class TrackPoint(
     val altitude: Double,    // 海抜高度 (メートル)
     val speed: Float,        // 速度 (m/s)
     val accuracy: Float,     // 水平方向の精度 (メートル)
-    val verticalAccuracy: Float?, // 垂直方向の精度 (nullableとする場合)
-    val heading: Float?      // 移動方向 (0-360度, nullableとする場合)
+    val verticalAccuracy: Float? = null, // 垂直方向の精度 (nullableとする場合)
+    val heading: Float? = null      // 移動方向 (0-360度, nullableとする場合)
 )

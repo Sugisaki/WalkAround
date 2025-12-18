@@ -28,20 +28,20 @@ data class Section(
     val sectionId: Long = 0,
 
     // セクション開始時の TrackPoint.id (外部キー)
-    val trackStartId: Long,
+    val trackStartId: Long? = null,
 
     // セクション終了時の TrackPoint.id (外部キー)
-    val trackEndId: Long,
+    val trackEndId: Long? = null,
 
     // このセクションで歩いた総距離 (メートル)
-    val distanceMeters: Double,
+    val distanceMeters: Double? = null,
 
     // このセクションの所要時間 (秒)
-    val durationSeconds: Long,
+    val durationSeconds: Long? = null,
 
     // 平均速度 (km/h)
-    val averageSpeedKmh: Double,
+    val averageSpeedKmh: Double? = null,
 
     // セクションが作成/完了した時刻 (UNIX時間: ミリ秒単位)
-    val createdAtTimestamp: Long
+    val createdAtTimestamp: Long? = null
 )

@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import com.studiokei.walkaround.ui.HomeScreen
 import com.studiokei.walkaround.ui.SettingsScreen
 import com.studiokei.walkaround.ui.theme.WalkaroundTheme
 
@@ -63,8 +64,7 @@ fun WalkaroundApp() {
     ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             when (currentDestination) {
-                AppDestinations.HOME -> Greeting(
-                    name = "Home",
+                AppDestinations.HOME -> HomeScreen(
                     modifier = Modifier.padding(innerPadding)
                 )
                 AppDestinations.FAVORITES -> Greeting(
