@@ -41,7 +41,8 @@ fun HomeScreen(
                 HomeViewModel(
                     AppDatabase.getDatabase(context),
                     StepSensorManager(context, healthConnectManager),
-                    healthConnectManager
+                    healthConnectManager,
+                    LocationManager(context)
                 )
             }
         }
@@ -61,6 +62,13 @@ fun HomeScreen(
         homeViewModel.onPermissionsResult(isGranted)
     }
 
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Handle permissions result if needed, but startTracking() will handle logic
+        // This launcher is primarily to request permissions before calling startTracking()
+    }
+
     // 権限リクエストをまとめて行うメソッド
     fun requestPermissions() {
         when (uiState.sensorMode) {
@@ -78,6 +86,13 @@ fun HomeScreen(
             }
             else -> {}
         }
+        // 位置情報権限をリクエスト
+        locationPermissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
     }
 
     fun handleStartClick() {
@@ -110,6 +125,16 @@ fun HomeScreen(
             )
             Text(
                 text = "${uiState.currentStepCount}",
+                style = MaterialTheme.typography.displayLarge
+            )
+            Spacer(modifier = Modifier.height(16.dp)) // Add spacer
+
+            Text(
+                text = "現在の位置情報の数",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "${uiState.currentTrackPointCount}",
                 style = MaterialTheme.typography.displayLarge
             )
             

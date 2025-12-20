@@ -1,5 +1,6 @@
 package com.studiokei.walkaround.ui
 
+import android.location.Location
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.studiokei.walkaround.data.database.AppDatabase
@@ -18,6 +19,7 @@ import kotlinx.coroutines.launch
 data class HomeUiState(
     val isRunning: Boolean = false,
     val currentStepCount: Int = 0,
+    val currentTrackPointCount: Int = 0,
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
     val hasHealthConnectPermissions: Boolean = false,
 )
@@ -26,6 +28,7 @@ class HomeViewModel(
     private val database: AppDatabase,
     private val stepSensorManager: StepSensorManager,
     private val healthConnectManager: HealthConnectManager,
+    private val locationManager: LocationManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -34,9 +37,14 @@ class HomeViewModel(
     private var currentSessionId: Long? = null
     private var startTime: Long = 0L
     private var sensorJob: Job? = null
+    private var locationJob: Job? = null
 
     init {
         viewModelScope.launch {
+            database.trackPointDao().getTrackPointCount().onEach { count ->
+                _uiState.value = _uiState.value.copy(currentTrackPointCount = count)
+            }.launchIn(viewModelScope)
+
             _uiState.value = _uiState.value.copy(
                 sensorMode = stepSensorManager.sensorMode,
                 hasHealthConnectPermissions = healthConnectManager.hasPermissions()
@@ -62,9 +70,11 @@ class HomeViewModel(
 
         // センサーからの歩数データの収集（launch）をここで行う
         launchStepMeasurement()
+        // 位置情報データの収集をここで行う
+        launchLocationMeasurement()
 
         viewModelScope.launch {
-            // スタート地点のダミーTrackPointを作成
+            // スタート地点のダミーTrackPointを作成 (最初の実測値が来るまでのプレースホルダー)
             val startTrackPointId = database.trackPointDao().insertTrackPoint(
                 TrackPoint(time = startTime, latitude = 0.0, longitude = 0.0, altitude = 0.0, speed = 0f, accuracy = 0f)
             )
@@ -88,10 +98,30 @@ class HomeViewModel(
         }.launchIn(viewModelScope)
     }
 
+    private fun launchLocationMeasurement() {
+        locationJob?.cancel()
+        locationJob = locationManager.requestLocationUpdates().onEach { location ->
+            val trackPoint = TrackPoint(
+                time = System.currentTimeMillis(),
+                latitude = location.latitude,
+                longitude = location.longitude,
+                altitude = location.altitude,
+                speed = location.speed,
+                accuracy = location.accuracy
+            )
+            database.trackPointDao().insertTrackPoint(trackPoint)
+            // currentTrackPointCount は TrackPointDao の Flow から自動更新される
+        }.launchIn(viewModelScope)
+    }
+
     fun stopTracking() {
+        // センサーと位置情報のジョブをキャンセル
         sensorJob?.cancel()
         sensorJob = null
+        locationJob?.cancel()
+        locationJob = null
 
+        // セッション終了処理
         viewModelScope.launch {
             val endTime = System.currentTimeMillis()
             val endTrackPointId = database.trackPointDao().insertTrackPoint(

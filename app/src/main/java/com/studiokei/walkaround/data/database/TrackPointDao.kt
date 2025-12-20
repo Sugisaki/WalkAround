@@ -11,6 +11,9 @@ interface TrackPointDao {
     @Query("SELECT * FROM tracks WHERE id BETWEEN :startId AND :endId ORDER BY time ASC")
     fun getTrackPointsBetweenIds(startId: Long, endId: Long): Flow<List<TrackPoint>>
 
+    @Query("SELECT COUNT(*) FROM tracks")
+    fun getTrackPointCount(): Flow<Int>
+
     @Insert
     suspend fun insertTrackPoint(trackPoint: TrackPoint): Long
 
