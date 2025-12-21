@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TrackPointDao {
     @Query("SELECT * FROM tracks WHERE id BETWEEN :startId AND :endId ORDER BY time ASC")
-    fun getTrackPointsBetweenIds(startId: Long, endId: Long): Flow<List<TrackPoint>>
+    fun getTrackPointsForSection(startId: Long, endId: Long): Flow<List<TrackPoint>>
 
     @Query("SELECT COUNT(*) FROM tracks")
     fun getTrackPointCount(): Flow<Int>
@@ -22,4 +22,7 @@ interface TrackPointDao {
 
     @Query("DELETE FROM tracks WHERE id IN (:ids)")
     suspend fun deleteTrackPointsByIds(ids: List<Long>)
+
+    @Query("SELECT * FROM tracks ORDER BY id DESC LIMIT 1")
+    suspend fun getLastTrackPoint(): TrackPoint?
 }

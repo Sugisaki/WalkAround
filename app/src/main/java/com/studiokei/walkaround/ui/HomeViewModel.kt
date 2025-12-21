@@ -1,6 +1,7 @@
 package com.studiokei.walkaround.ui
 
 import android.location.Location
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.studiokei.walkaround.data.database.AppDatabase
@@ -64,6 +65,7 @@ class HomeViewModel(
 
     fun startTracking() {
         if (_uiState.value.isRunning) return
+        Log.d("HomeViewModel", "startTracking called")
 
         _uiState.value = _uiState.value.copy(isRunning = true, currentStepCount = 0)
         startTime = System.currentTimeMillis()
@@ -74,14 +76,9 @@ class HomeViewModel(
         launchLocationMeasurement()
 
         viewModelScope.launch {
-            // スタート地点のダミーTrackPointを作成 (最初の実測値が来るまでのプレースホルダー)
-            val startTrackPointId = database.trackPointDao().insertTrackPoint(
-                TrackPoint(time = startTime, latitude = 0.0, longitude = 0.0, altitude = 0.0, speed = 0f, accuracy = 0f)
-            )
-
-            // 新しいセクションを作成
+            // 新しいセクションを作成 (trackStartId は後で更新)
             val newSection = Section(
-                trackStartId = startTrackPointId,
+                trackStartId = null,
                 distanceMeters = 0.0,
                 durationSeconds = 0L,
                 averageSpeedKmh = 0.0,
@@ -100,7 +97,9 @@ class HomeViewModel(
 
     private fun launchLocationMeasurement() {
         locationJob?.cancel()
+        Log.d("HomeViewModel", "launchLocationMeasurement called")
         locationJob = locationManager.requestLocationUpdates().onEach { location ->
+            Log.d("HomeViewModel", "Location collected: $location")
             val trackPoint = TrackPoint(
                 time = System.currentTimeMillis(),
                 latitude = location.latitude,
@@ -109,12 +108,24 @@ class HomeViewModel(
                 speed = location.speed,
                 accuracy = location.accuracy
             )
-            database.trackPointDao().insertTrackPoint(trackPoint)
-            // currentTrackPointCount は TrackPointDao の Flow から自動更新される
+            val insertedId = database.trackPointDao().insertTrackPoint(trackPoint)
+            Log.d("HomeViewModel", "Inserted TrackPoint with id: $insertedId")
+
+            // 最初のTrackPointであれば、SectionのtrackStartIdを更新
+            currentSessionId?.let { sessionId ->
+                val currentSection = database.sectionDao().getSectionById(sessionId)
+                if (currentSection != null && currentSection.trackStartId == null) {
+                    database.sectionDao().updateSection(
+                        currentSection.copy(trackStartId = insertedId)
+                    )
+                    Log.d("HomeViewModel", "Updated Section $sessionId with startTrackId: $insertedId")
+                }
+            }
         }.launchIn(viewModelScope)
     }
 
     fun stopTracking() {
+        Log.d("HomeViewModel", "stopTracking called")
         // センサーと位置情報のジョブをキャンセル
         sensorJob?.cancel()
         sensorJob = null
@@ -124,9 +135,7 @@ class HomeViewModel(
         // セッション終了処理
         viewModelScope.launch {
             val endTime = System.currentTimeMillis()
-            val endTrackPointId = database.trackPointDao().insertTrackPoint(
-                TrackPoint(time = endTime, latitude = 0.0, longitude = 0.0, altitude = 0.0, speed = 0f, accuracy = 0f)
-            )
+            val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
             
             currentSessionId?.let { sessionId ->
                 val stepSegment = StepSegment(
@@ -141,7 +150,7 @@ class HomeViewModel(
                 section?.let {
                     val updatedSection = it.copy(
                         durationSeconds = (endTime - startTime) / 1000,
-                        trackEndId = endTrackPointId
+                        trackEndId = lastTrackPoint?.id
                     )
                     database.sectionDao().updateSection(updatedSection)
                 }
@@ -151,3 +160,4 @@ class HomeViewModel(
         }
     }
 }
+

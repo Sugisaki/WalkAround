@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
 import android.os.Looper
+import android.util.Log
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -21,6 +22,7 @@ class LocationManager(private val context: Context) {
 
     @SuppressLint("MissingPermission") // Permissions are handled in HomeScreen
     fun requestLocationUpdates(): Flow<Location> = callbackFlow {
+        Log.d("LocationManager", "requestLocationUpdates called")
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             1000L // 1 second interval
@@ -32,6 +34,7 @@ class LocationManager(private val context: Context) {
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 locationResult.lastLocation?.let {
+                    Log.d("LocationManager", "New location received: $it")
                     trySend(it)
                 }
             }
@@ -44,7 +47,9 @@ class LocationManager(private val context: Context) {
         )
 
         awaitClose {
+            Log.d("LocationManager", "Stopping location updates")
             fusedLocationClient.removeLocationUpdates(locationCallback)
         }
     }
 }
+

@@ -23,8 +23,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.studiokei.walkaround.ui.HomeScreen
+import com.studiokei.walkaround.ui.MapScreen
 import com.studiokei.walkaround.ui.SettingsScreen
 import com.studiokei.walkaround.ui.theme.WalkaroundTheme
 
@@ -67,8 +69,7 @@ fun WalkaroundApp() {
                 AppDestinations.HOME -> HomeScreen(
                     modifier = Modifier.padding(innerPadding)
                 )
-                AppDestinations.FAVORITES -> Greeting(
-                    name = "お気に入り",
+                AppDestinations.MAP -> MapScreen(
                     modifier = Modifier.padding(innerPadding)
                 )
                 AppDestinations.SETTINGS -> SettingsScreen(
@@ -84,22 +85,8 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     HOME("Home", Icons.Default.Home),
-    FAVORITES("Favorites", Icons.Default.Favorite),
+    MAP("Map", Icons.Default.Place),
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = name,
-        modifier = modifier
-    )
-}
 
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    WalkaroundTheme {
-        Greeting("Android")
-    }
-}

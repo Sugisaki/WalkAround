@@ -65,12 +65,24 @@ fun HomeScreen(
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // Handle permissions result if needed, but startTracking() will handle logic
-        // This launcher is primarily to request permissions before calling startTracking()
+        if (permissions.getOrDefault(Manifest.permission.ACCESS_FINE_LOCATION, false) ||
+            permissions.getOrDefault(Manifest.permission.ACCESS_COARSE_LOCATION, false)
+        ) {
+            homeViewModel.startTracking()
+        } else {
+            // 権限が拒否された場合の処理をここに書く (例: SnackBar表示)
+        }
     }
 
     // 権限リクエストをまとめて行うメソッド
     fun requestPermissions() {
+        // 位置情報権限をリクエスト
+        locationPermissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
         when (uiState.sensorMode) {
             SensorMode.COUNTER, SensorMode.DETECTOR -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -86,18 +98,18 @@ fun HomeScreen(
             }
             else -> {}
         }
-        // 位置情報権限をリクエスト
-        locationPermissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
     }
 
     fun handleStartClick() {
-        requestPermissions() // 権限リクエストを実施
-        homeViewModel.startTracking() // 直後に無条件で開始
+        // 位置情報権限がすでに許可されているか確認
+        val fineLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val coarseLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (fineLocationGranted || coarseLocationGranted) {
+            homeViewModel.startTracking()
+        } else {
+            requestPermissions() // 権限がなければリクエスト
+        }
     }
 
     Scaffold(modifier = modifier) { innerPadding ->

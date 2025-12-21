@@ -16,6 +16,9 @@ interface SectionDao {
     @Query("SELECT * FROM sections WHERE sectionId = :sectionId")
     suspend fun getSectionById(sectionId: Long): Section?
 
+    @Query("SELECT * FROM sections ORDER BY createdAtTimestamp DESC LIMIT 1")
+    suspend fun getLastSection(): Section?
+
     @Insert
     suspend fun insertSection(section: Section): Long
 
