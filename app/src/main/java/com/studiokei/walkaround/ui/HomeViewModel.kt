@@ -1,11 +1,11 @@
 package com.studiokei.walkaround.ui
 
-import android.location.Location
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.data.model.Section
+import com.studiokei.walkaround.data.model.SectionSummary
 import com.studiokei.walkaround.data.model.StepSegment
 import com.studiokei.walkaround.data.model.TrackPoint
 import com.studiokei.walkaround.ui.StepSensorManager.SensorMode
@@ -16,13 +16,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 
 data class HomeUiState(
     val isRunning: Boolean = false,
     val currentStepCount: Int = 0,
     val currentTrackPointCount: Int = 0,
+    val todayStepCount: Int = 0, // 本日の歩数
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
     val hasHealthConnectPermissions: Boolean = false,
+    val sections: List<SectionSummary> = emptyList()
 )
 
 class HomeViewModel(
@@ -39,11 +43,19 @@ class HomeViewModel(
     private var startTime: Long = 0L
     private var sensorJob: Job? = null
     private var locationJob: Job? = null
+    private var trackPointCounter = 0
 
     init {
         viewModelScope.launch {
-            database.trackPointDao().getTrackPointCount().onEach { count ->
-                _uiState.value = _uiState.value.copy(currentTrackPointCount = count)
+            // セクション一覧の監視
+            database.sectionDao().getSectionSummaries().onEach { summaries ->
+                _uiState.value = _uiState.value.copy(sections = summaries)
+            }.launchIn(viewModelScope)
+
+            // 本日の歩数の監視
+            val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            database.sectionDao().getTodayTotalSteps(startOfDay).onEach { count ->
+                _uiState.value = _uiState.value.copy(todayStepCount = count ?: 0)
             }.launchIn(viewModelScope)
 
             _uiState.value = _uiState.value.copy(
@@ -54,29 +66,28 @@ class HomeViewModel(
     }
 
     fun onPermissionsResult(granted: Boolean) {
-        if (granted) {
-            viewModelScope.launch {
-                _uiState.value = _uiState.value.copy(
-                    hasHealthConnectPermissions = healthConnectManager.hasPermissions()
-                )
-            }
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                hasHealthConnectPermissions = healthConnectManager.hasPermissions()
+            )
         }
     }
 
     fun startTracking() {
         if (_uiState.value.isRunning) return
-        Log.d("HomeViewModel", "startTracking called")
-
-        _uiState.value = _uiState.value.copy(isRunning = true, currentStepCount = 0)
+        
+        trackPointCounter = 0
+        _uiState.value = _uiState.value.copy(
+            isRunning = true, 
+            currentStepCount = 0,
+            currentTrackPointCount = 0
+        )
         startTime = System.currentTimeMillis()
 
-        // センサーからの歩数データの収集（launch）をここで行う
         launchStepMeasurement()
-        // 位置情報データの収集をここで行う
         launchLocationMeasurement()
 
         viewModelScope.launch {
-            // 新しいセクションを作成 (trackStartId は後で更新)
             val newSection = Section(
                 trackStartId = null,
                 distanceMeters = 0.0,
@@ -97,9 +108,7 @@ class HomeViewModel(
 
     private fun launchLocationMeasurement() {
         locationJob?.cancel()
-        Log.d("HomeViewModel", "launchLocationMeasurement called")
         locationJob = locationManager.requestLocationUpdates().onEach { location ->
-            Log.d("HomeViewModel", "Location collected: $location")
             val trackPoint = TrackPoint(
                 time = System.currentTimeMillis(),
                 latitude = location.latitude,
@@ -109,30 +118,27 @@ class HomeViewModel(
                 accuracy = location.accuracy
             )
             val insertedId = database.trackPointDao().insertTrackPoint(trackPoint)
-            Log.d("HomeViewModel", "Inserted TrackPoint with id: $insertedId")
+            
+            trackPointCounter++
+            _uiState.value = _uiState.value.copy(currentTrackPointCount = trackPointCounter)
 
-            // 最初のTrackPointであれば、SectionのtrackStartIdを更新
             currentSessionId?.let { sessionId ->
                 val currentSection = database.sectionDao().getSectionById(sessionId)
                 if (currentSection != null && currentSection.trackStartId == null) {
                     database.sectionDao().updateSection(
                         currentSection.copy(trackStartId = insertedId)
                     )
-                    Log.d("HomeViewModel", "Updated Section $sessionId with startTrackId: $insertedId")
                 }
             }
         }.launchIn(viewModelScope)
     }
 
     fun stopTracking() {
-        Log.d("HomeViewModel", "stopTracking called")
-        // センサーと位置情報のジョブをキャンセル
         sensorJob?.cancel()
         sensorJob = null
         locationJob?.cancel()
         locationJob = null
 
-        // セッション終了処理
         viewModelScope.launch {
             val endTime = System.currentTimeMillis()
             val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
@@ -160,4 +166,3 @@ class HomeViewModel(
         }
     }
 }
-

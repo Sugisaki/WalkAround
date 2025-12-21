@@ -7,9 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBox
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -22,8 +21,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.studiokei.walkaround.ui.HomeScreen
 import com.studiokei.walkaround.ui.MapScreen
@@ -46,6 +43,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun WalkaroundApp() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
+    // 選択されたセクションIDを保持
+    var selectedSectionId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -67,10 +66,15 @@ fun WalkaroundApp() {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             when (currentDestination) {
                 AppDestinations.HOME -> HomeScreen(
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier.padding(innerPadding),
+                    onSectionClick = { sectionId ->
+                        selectedSectionId = sectionId
+                        currentDestination = AppDestinations.MAP
+                    }
                 )
                 AppDestinations.MAP -> MapScreen(
-                    modifier = Modifier.padding(innerPadding)
+                    modifier = Modifier.padding(innerPadding),
+                    sectionId = selectedSectionId
                 )
                 AppDestinations.SETTINGS -> SettingsScreen(
                     modifier = Modifier.padding(innerPadding)
@@ -88,5 +92,3 @@ enum class AppDestinations(
     MAP("Map", Icons.Default.Place),
     SETTINGS("Settings", Icons.Default.Settings),
 }
-
-
