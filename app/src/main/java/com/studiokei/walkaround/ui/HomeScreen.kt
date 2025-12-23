@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +44,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
-    onSectionClick: (Long) -> Unit = {} // クリックイベントを追加
+    onSectionClick: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
     val healthConnectManager = HealthConnectManager(context)
@@ -51,10 +52,10 @@ fun HomeScreen(
         factory = viewModelFactory {
             initializer {
                 HomeViewModel(
+                    context.applicationContext,
                     AppDatabase.getDatabase(context),
                     StepSensorManager(context, healthConnectManager),
-                    healthConnectManager,
-                    LocationManager(context)
+                    healthConnectManager
                 )
             }
         }
@@ -65,6 +66,10 @@ fun HomeScreen(
         .withZone(ZoneId.systemDefault())
 
     // --- 権限リクエスト用ランチャー ---
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
     val healthConnectPermissionsLauncher = rememberLauncherForActivityResult(
         contract = healthConnectManager.requestPermissionsContract()
     ) { grantedPermissions ->
@@ -84,6 +89,13 @@ fun HomeScreen(
             permissions.getOrDefault(Manifest.permission.ACCESS_COARSE_LOCATION, false)
         ) {
             homeViewModel.startTracking()
+        }
+    }
+
+    // Android 13以降での通知権限の確認
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -130,7 +142,6 @@ fun HomeScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ステータス表示エリア
             if (uiState.sensorMode == SensorMode.UNAVAILABLE) {
                 Text(
                     text = "歩数計センサーまたはヘルスコネクトがこのデバイスでは利用できません。",
@@ -166,7 +177,6 @@ fun HomeScreen(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             } else {
-                // 非走行時に「本日の歩数」を表示
                 Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
                 Text(text = "${uiState.todayStepCount}", style = MaterialTheme.typography.displayLarge)
                 Spacer(modifier = Modifier.height(24.dp))
@@ -184,7 +194,6 @@ fun HomeScreen(
                 }
             }
 
-            // 走行中でないときのみ、過去のセクション一覧を表示
             if (!uiState.isRunning) {
                 Spacer(modifier = Modifier.height(32.dp))
                 HorizontalDivider()
@@ -206,7 +215,7 @@ fun HomeScreen(
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onSectionClick(summary.sectionId) } // クリックイベント
+                                    .clickable { onSectionClick(summary.sectionId) }
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text(
