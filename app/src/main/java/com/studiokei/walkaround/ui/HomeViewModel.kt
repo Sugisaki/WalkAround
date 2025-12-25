@@ -97,8 +97,8 @@ class HomeViewModel(
             }.launchIn(viewModelScope)
         }
     }
-
     fun startTracking() {
+        // 位置情報のトラッキングを開始
         val intent = Intent(context, TrackingService::class.java).apply {
             action = TrackingService.ACTION_START
         }

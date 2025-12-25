@@ -7,6 +7,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.data.model.Section
+import com.studiokei.walkaround.util.applyMedianFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,12 +46,23 @@ class MapViewModel(
                     .getTrackPointsForSection(section.trackStartId, section.trackEndId)
                     .first()
 
-                val latLngs = trackPoints.map { LatLng(it.latitude, it.longitude) }
-                if (latLngs.size > 1) {
+                val rawLatLngs = trackPoints.map { LatLng(it.latitude, it.longitude) }
+                if (rawLatLngs.size > 1) {
+                    // 設定から窓サイズを取得
+                    val settings = database.settingsDao().getSettings().first()
+                    val windowSize = settings?.medianWindowSize ?: 7
+                    
+                    // 窓サイズが0より大きい場合のみフィルタを適用
+                    val filteredLatLngs = if (windowSize > 0) {
+                        applyMedianFilter(rawLatLngs, windowSize = windowSize)
+                    } else {
+                        rawLatLngs
+                    }
+                    
                     val boundsBuilder = LatLngBounds.Builder()
-                    latLngs.forEach { boundsBuilder.include(it) }
+                    filteredLatLngs.forEach { boundsBuilder.include(it) }
                     _initialBounds.value = boundsBuilder.build()
-                    _track.value = latLngs
+                    _track.value = filteredLatLngs
                 } else {
                     loadFallbackLocation()
                 }

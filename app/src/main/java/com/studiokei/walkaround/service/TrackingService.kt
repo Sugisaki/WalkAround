@@ -1,14 +1,18 @@
 package com.studiokei.walkaround.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.studiokei.walkaround.R
 import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.data.model.Section
@@ -84,7 +88,34 @@ class TrackingService : Service() {
         trackPointCounter = 0
         startTime = System.currentTimeMillis()
 
-        startForeground(NOTIFICATION_ID, createNotification("トラッキング中..."))
+        // 権限の状態を確認して、フォアグラウンドサービスのタイプを決定する
+        val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        
+        val hasActivityPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+
+        var serviceType = 0
+        if (hasLocationPermission) {
+            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
+        if (hasActivityPermission) {
+            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+        }
+
+        // API 29以降では、タイプを指定して開始する
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (serviceType != 0) {
+                startForeground(NOTIFICATION_ID, createNotification("トラッキング中..."), serviceType)
+            } else {
+                startForeground(NOTIFICATION_ID, createNotification("トラッキング中..."))
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, createNotification("トラッキング中..."))
+        }
 
         launchStepMeasurement()
         launchLocationMeasurement()
@@ -172,7 +203,7 @@ class TrackingService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Tracking Service Channel",
-                NotificationManager.IMPORTANCE_DEFAULT // LOWからDEFAULTに変更
+                NotificationManager.IMPORTANCE_LOW // 音やバイブレーションを抑制
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -185,7 +216,8 @@ class TrackingService : Service() {
             .setContentText(content)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT) // 優先度を明示的に設定
+            .setPriority(NotificationCompat.PRIORITY_LOW) // 優先度を低く設定
+            .setSilent(true) // 明示的にサイレント設定
             .build()
     }
 

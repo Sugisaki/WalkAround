@@ -74,12 +74,28 @@ fun HomeScreen(
         contract = healthConnectManager.requestPermissionsContract()
     ) { grantedPermissions ->
         homeViewModel.onPermissionsResult(grantedPermissions.values.all { it })
+        // ヘルスコネクトの確認が終わったら、結果に関わらず開始
+        homeViewModel.startTracking()
     }
 
     val activityRecognitionPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         homeViewModel.onPermissionsResult(isGranted)
+        
+        if (isGranted) {
+            // 身体活動の許可が得られたら開始（ヘルスコネクトは不要）
+            homeViewModel.startTracking()
+        } else {
+            // 身体活動の許可が得られなかった場合のみ、ヘルスコネクトが必要か確認
+            if (uiState.sensorMode == SensorMode.HEALTH_CONNECT && !uiState.hasHealthConnectPermissions) {
+                println("🟧🟧 身体活動拒否 -> ヘルスコネクト権限リクエストへ")
+                healthConnectPermissionsLauncher.launch(arrayOf("androidx.health.connect.permission.read.STEPS"))
+            } else {
+                // ヘルスコネクトが使えない場合、開始
+                homeViewModel.startTracking()
+            }
+        }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -88,6 +104,7 @@ fun HomeScreen(
         if (permissions.getOrDefault(Manifest.permission.ACCESS_FINE_LOCATION, false) ||
             permissions.getOrDefault(Manifest.permission.ACCESS_COARSE_LOCATION, false)
         ) {
+            println("[Debug] 🟧🟧 位置情報許可後の開始")
             homeViewModel.startTracking()
         }
     }
@@ -99,39 +116,41 @@ fun HomeScreen(
         }
     }
 
-    fun requestPermissions() {
-        locationPermissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
-        when (uiState.sensorMode) {
-            SensorMode.COUNTER, SensorMode.DETECTOR -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    activityRecognitionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
-                }
-            }
-            SensorMode.HEALTH_CONNECT -> {
-                if (!uiState.hasHealthConnectPermissions) {
-                    healthConnectPermissionsLauncher.launch(
-                        arrayOf("androidx.health.connect.permission.read.STEPS")
-                    )
-                }
-            }
-            else -> {}
-        }
-    }
-
     fun handleStartClick() {
         val fineLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val coarseLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val hasLocation = fineLocationGranted || coarseLocationGranted
 
-        if (fineLocationGranted || coarseLocationGranted) {
-            homeViewModel.startTracking()
-        } else {
-            requestPermissions()
+        val activityRecognitionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            context.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else true
+
+        // 1. 位置情報が全くない場合はリクエスト（必要なら身体活動も混ぜる）
+        if (!hasLocation) {
+            println("🟧🟧 1. 位置情報がないため権限リクエストへ")
+            val permissions = mutableListOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+            if (!activityRecognitionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && 
+                uiState.sensorMode != SensorMode.UNAVAILABLE) {
+                permissions.add(Manifest.permission.ACTIVITY_RECOGNITION)
+            }
+            locationPermissionLauncher.launch(permissions.toTypedArray())
+            return
         }
+
+        // --- ここから「位置情報はある」状態 ---
+        // 2. 身体活動がない場合、リクエスト（ランチャー側で拒否時のみヘルスコネクトを確認する）
+        if (!activityRecognitionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            uiState.sensorMode != SensorMode.UNAVAILABLE) {
+            println("🟧🟧 2. 身体活動権限リクエストへ")
+            activityRecognitionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+            return
+        }
+
+        // 権限は揃っている（または身体活動の許可がある）ので、即座にトラッキングを開始！
+        homeViewModel.startTracking()
     }
 
     Scaffold(modifier = modifier) { innerPadding ->

@@ -21,5 +21,9 @@ data class Settings(
     val isNotificationEnabled: Boolean,
 
     // 通知や音声案内の音量設定 (0.0〜1.0)
-    val volume: Float
+    val volume: Float,
+
+    // メディアンフィルタの窓サイズ (0, 3, 5, 7, 9, 11, 13, 15, 17, 19)
+    // 0の場合はフィルタを適用しない
+    val medianWindowSize: Int = 7
 )

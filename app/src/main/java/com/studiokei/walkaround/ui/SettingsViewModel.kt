@@ -23,7 +23,8 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
                         displayUnit = it.displayUnit,
                         isDarkMode = it.isDarkMode,
                         isNotificationEnabled = it.isNotificationEnabled,
-                        volume = it.volume
+                        volume = it.volume,
+                        medianWindowSize = it.medianWindowSize
                     )
                 } ?: SettingsUiState() // Default values if no settings found
             }
@@ -55,6 +56,11 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
         saveSettings()
     }
 
+    fun updateMedianWindowSize(size: Int) {
+        _uiState.value = _uiState.value.copy(medianWindowSize = size)
+        saveSettings()
+    }
+
     private fun saveSettings() {
         viewModelScope.launch {
             val currentSettings = _uiState.value
@@ -64,7 +70,8 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
                     displayUnit = currentSettings.displayUnit,
                     isDarkMode = currentSettings.isDarkMode,
                     isNotificationEnabled = currentSettings.isNotificationEnabled,
-                    volume = currentSettings.volume
+                    volume = currentSettings.volume,
+                    medianWindowSize = currentSettings.medianWindowSize
                 )
             )
         }
@@ -76,5 +83,6 @@ data class SettingsUiState(
     val displayUnit: String = "km",
     val isDarkMode: Boolean = false,
     val isNotificationEnabled: Boolean = true,
-    val volume: Float = 0.5f
+    val volume: Float = 0.5f,
+    val medianWindowSize: Int = 7
 )

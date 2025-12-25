@@ -2,6 +2,7 @@ package com.studiokei.walkaround.data.model
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
@@ -20,6 +21,10 @@ import androidx.room.PrimaryKey
             childColumns = ["trackEndId"],
             onDelete = ForeignKey.RESTRICT // 参照されるTrackPointが削除されないようにする
         )
+    ],
+    indices = [
+        Index("trackStartId"),
+        Index("trackEndId")
     ]
 )
 data class Section(

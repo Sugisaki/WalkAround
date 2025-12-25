@@ -1,6 +1,7 @@
 package com.studiokei.walkaround.data.database
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -11,8 +12,12 @@ import com.studiokei.walkaround.data.model.TrackPoint
 
 @Database(
     entities = [Settings::class, TrackPoint::class, Section::class, StepSegment::class],
-    version = 3, // Sectionのプロパティを nullable に
-    exportSchema = false
+    version = 7,
+    /*autoMigrations = [
+        AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6) // 5 から 6 への自動マイグレーションを追加
+    ],*/
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun settingsDao(): SettingsDao
@@ -31,7 +36,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                .fallbackToDestructiveMigration() // スキーマ変更時にデータを破棄して再作成
+                //.fallbackToDestructiveMigration() // スキーマ変更時にデータを破棄して再作成
                 .build()
                 INSTANCE = instance
                 instance
