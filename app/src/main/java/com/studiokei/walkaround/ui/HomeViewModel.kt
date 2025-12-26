@@ -25,6 +25,7 @@ data class HomeUiState(
     val currentStepCount: Int = 0,
     val currentTrackPointCount: Int = 0,
     val todayStepCount: Int = 0,
+    val currentAddress: String? = null,
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
     val hasHealthConnectPermissions: Boolean = false,
     val sections: List<SectionSummary> = emptyList()
@@ -40,6 +41,7 @@ class HomeViewModel(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
+    private val locationManager = LocationManager(context)
     private var trackingService: TrackingService? = null
     private var isBound = false
 
@@ -86,6 +88,9 @@ class HomeViewModel(
         trackingService?.let { service ->
             service.isRunning.onEach { running ->
                 _uiState.value = _uiState.value.copy(isRunning = running)
+                if (!running) {
+                    _uiState.value = _uiState.value.copy(currentAddress = null)
+                }
             }.launchIn(viewModelScope)
 
             service.currentSteps.onEach { steps ->
@@ -97,8 +102,8 @@ class HomeViewModel(
             }.launchIn(viewModelScope)
         }
     }
+
     fun startTracking() {
-        // 位置情報のトラッキングを開始
         val intent = Intent(context, TrackingService::class.java).apply {
             action = TrackingService.ACTION_START
         }
@@ -110,6 +115,40 @@ class HomeViewModel(
             action = TrackingService.ACTION_STOP
         }
         context.startService(intent)
+    }
+
+    fun fetchCurrentAddress() {
+        // 先に「取得中...」と表示させて視覚的なフィードバックを返す
+        _uiState.value = _uiState.value.copy(currentAddress = "取得中...")
+
+        viewModelScope.launch {
+            if (_uiState.value.isRunning) {
+                // 走行中: DBから最後に保存された TrackPoint を取得
+                val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
+                
+                if (lastTrackPoint != null) {
+                    val address = locationManager.getAddressFromLocation(
+                        lastTrackPoint.latitude,
+                        lastTrackPoint.longitude
+                    )
+                    _uiState.value = _uiState.value.copy(currentAddress = address)
+                } else {
+                    _uiState.value = _uiState.value.copy(currentAddress = "位置情報がまだ記録されていません")
+                }
+            } else {
+                // 停止中: 現在の位置情報をリクエストして取得
+                val location = locationManager.getCurrentLocation()
+                if (location != null) {
+                    val address = locationManager.getAddressFromLocation(
+                        location.latitude,
+                        location.longitude
+                    )
+                    _uiState.value = _uiState.value.copy(currentAddress = address)
+                } else {
+                    _uiState.value = _uiState.value.copy(currentAddress = "現在地を取得できませんでした")
+                }
+            }
+        }
     }
 
     fun onPermissionsResult(granted: Boolean) {

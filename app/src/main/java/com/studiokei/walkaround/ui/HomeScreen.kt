@@ -153,6 +153,20 @@ fun HomeScreen(
         homeViewModel.startTracking()
     }
 
+    // 住所表示ボタン押下時の処理
+    fun handleFetchAddressClick() {
+        val fineLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val coarseLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        
+        if (fineLocationGranted || coarseLocationGranted) {
+            homeViewModel.fetchCurrentAddress()
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            )
+        }
+    }
+
     Scaffold(modifier = modifier) { innerPadding ->
         Column(
             modifier = Modifier
@@ -198,7 +212,22 @@ fun HomeScreen(
             } else {
                 Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
                 Text(text = "${uiState.todayStepCount}", style = MaterialTheme.typography.displayLarge)
-                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 住所表示ボタン（常時表示）
+            Button(onClick = { handleFetchAddressClick() }) {
+                Text("住所を表示")
+            }
+
+            uiState.currentAddress?.let { address ->
+                Text(
+                    text = address,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                    textAlign = TextAlign.Center
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))
