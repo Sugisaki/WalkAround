@@ -5,18 +5,18 @@ import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.studiokei.walkaround.data.model.AddressRecord
 import com.studiokei.walkaround.data.model.Section
 import com.studiokei.walkaround.data.model.Settings
 import com.studiokei.walkaround.data.model.StepSegment
 import com.studiokei.walkaround.data.model.TrackPoint
 
 @Database(
-    entities = [Settings::class, TrackPoint::class, Section::class, StepSegment::class],
-    version = 7,
-    /*autoMigrations = [
-        AutoMigration(from = 4, to = 5),
-        AutoMigration(from = 5, to = 6) // 5 から 6 への自動マイグレーションを追加
-    ],*/
+    entities = [Settings::class, TrackPoint::class, Section::class, StepSegment::class, AddressRecord::class],
+    version = 8,
+    autoMigrations = [
+        AutoMigration(from = 7, to = 8)  // 自動マイグレーション
+    ],
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -24,6 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackPointDao(): TrackPointDao
     abstract fun sectionDao(): SectionDao
     abstract fun stepSegmentDao(): StepSegmentDao
+    abstract fun addressDao(): AddressDao
 
     companion object {
         @Volatile

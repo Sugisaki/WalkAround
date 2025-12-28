@@ -128,11 +128,11 @@ class HomeViewModel(
                 
                 if (lastTrackPoint != null) {
                     // 保存されたロケール（あれば）を使用して住所を取得
-                    val address = locationManager.getAddressFromLocation(
+                    val address = locationManager.getLocaleAddress(
                         lastTrackPoint.latitude,
                         lastTrackPoint.longitude
                     )
-                    _uiState.value = _uiState.value.copy(currentAddress = address)
+                    _uiState.value = _uiState.value.copy(currentAddress = address?.getAddressLine(0))
                 } else {
                     _uiState.value = _uiState.value.copy(currentAddress = "位置情報がまだ記録されていません")
                 }
@@ -142,11 +142,17 @@ class HomeViewModel(
                 if (location != null) {
                     // 停止中にボタンが押されたとき、ロケールを更新してから住所を取得
                     locationManager.updateCachedLocale(location.latitude, location.longitude)
-                    val address = locationManager.getAddressFromLocation(
+                    val address = locationManager.getLocaleAddress(
                         location.latitude,
                         location.longitude
                     )
-                    _uiState.value = _uiState.value.copy(currentAddress = address)
+                    _uiState.value = _uiState.value.copy(currentAddress = address?.getAddressLine(0))
+                    
+                    // 住所をデータベースに保存
+                    locationManager.saveAddressRecord(
+                        lat = location.latitude,
+                        lng = location.longitude
+                    )
                 } else {
                     _uiState.value = _uiState.value.copy(currentAddress = "現在地を取得できませんでした")
                 }

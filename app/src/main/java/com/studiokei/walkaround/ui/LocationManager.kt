@@ -15,6 +15,8 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.studiokei.walkaround.data.database.AppDatabase
+import com.studiokei.walkaround.data.model.AddressRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +30,7 @@ class LocationManager(private val context: Context) {
 
     private val fusedLocationClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
+    private val database: AppDatabase = AppDatabase.getDatabase(context)
 
     companion object {
         // 住所表示用のロケールを保持する変数
@@ -98,22 +101,20 @@ class LocationManager(private val context: Context) {
     }
 
     /**
-     * 保持されているロケール（なければデフォルト）を使用して住所を取得する
+     * 保持されているロケール（なければデフォルト）を使用して住所オブジェクトを取得する
      */
-    suspend fun getAddressFromLocation(latitude: Double, longitude: Double): String? = withContext(Dispatchers.IO) {
-        Log.d("LocationManager", "getAddressFromLocation called for: $latitude, $longitude using locale: ${cachedLocale ?: "Default"}")
+    suspend fun getLocaleAddress(latitude: Double, longitude: Double): Address? = withContext(Dispatchers.IO) {
+        Log.d("LocationManager", "getLocaleAddress called for: $latitude, $longitude using locale: ${cachedLocale ?: "Default"}")
         val locale = cachedLocale ?: Locale.getDefault()
         val geocoder = Geocoder(context, locale)
         
         return@withContext try {
-            val address = getAddressFromLocation(geocoder, latitude, longitude)
-            Log.d("LocationManager", "Result getAddressFromLocation : $address")
-            val result = address?.getAddressLine(0) ?: "住所が見つかりませんでした"
-            Log.d("LocationManager", "Final address: $result")
-            result
+            val address = getAddressInternal(geocoder, latitude, longitude)
+            Log.d("LocationManager", "Result getLocaleAddress : $address")
+            address
         } catch (e: Exception) {
             Log.e("LocationManager", "Geocoder error", e)
-            "住所の取得に失敗しました"
+            null
         }
     }
 
@@ -125,7 +126,7 @@ class LocationManager(private val context: Context) {
         val initialGeocoder = Geocoder(context, Locale.getDefault())
         
         try {
-            val firstAddress = getAddressFromLocation(initialGeocoder, latitude, longitude)
+            val firstAddress = getAddressInternal(initialGeocoder, latitude, longitude)
             firstAddress?.countryCode?.let { countryCode ->
                 cachedLocale = Locale.Builder().setRegion(countryCode).build()
                 Log.d("LocationManager", "Locale updated and cached: $cachedLocale")
@@ -135,7 +136,7 @@ class LocationManager(private val context: Context) {
         }
     }
 
-    private suspend fun getAddressFromLocation(geocoder: Geocoder, lat: Double, lng: Double): Address? {
+    private suspend fun getAddressInternal(geocoder: Geocoder, lat: Double, lng: Double): Address? {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 suspendCancellableCoroutine { continuation ->
@@ -154,8 +155,46 @@ class LocationManager(private val context: Context) {
                 geocoder.getFromLocation(lat, lng, 1)?.getOrNull(0)
             }
         } catch (e: Exception) {
-            Log.e("LocationManager", "getAddressFromLocation exception", e)
+            Log.e("LocationManager", "getAddressInternal exception", e)
             null
+        }
+    }
+
+    suspend fun saveAddressRecord(
+        lat: Double?,
+        lng: Double?,
+        sectionId: Long? = null,
+        trackId: Long? = null
+    ) {
+        withContext(Dispatchers.IO) {
+            val time = System.currentTimeMillis()
+            var addressLine: String? = null
+            var name: String? = null
+
+            if (lat != null && lng != null) {
+                val address = getLocaleAddress(lat, lng)
+                addressLine = address?.getAddressLine(0)
+                
+                // featureName が数字と記号だけの場合は name を null にする
+                val fName = address?.featureName
+                name = if (fName != null && fName.any { it.isLetter() }) {
+                    fName
+                } else {
+                    null
+                }
+            }
+
+            val record = AddressRecord(
+                time = time,
+                sectionId = sectionId,
+                trackId = trackId,
+                lat = lat,
+                lng = lng,
+                name = name,
+                addressLine = addressLine
+            )
+            database.addressDao().insert(record)
+            Log.d("LocationManager", "AddressRecord saved: $record")
         }
     }
 }

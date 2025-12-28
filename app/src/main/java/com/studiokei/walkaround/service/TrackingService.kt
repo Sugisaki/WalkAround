@@ -150,10 +150,17 @@ class TrackingService : Service() {
             )
             val insertedId = database.trackPointDao().insertTrackPoint(trackPoint)
             
-            // 走行開始後、最初のTrackPointを保存したときにロケールを更新する
+            // 走行開始後、最初のTrackPointを保存したときにロケールを更新し、住所を保存する
             if (trackPointCounter == 0) {
+                val sessionId = currentSessionId
                 serviceScope.launch {
                     locationManager.updateCachedLocale(location.latitude, location.longitude)
+                    locationManager.saveAddressRecord(
+                        lat = location.latitude,
+                        lng = location.longitude,
+                        sectionId = sessionId,
+                        trackId = insertedId
+                    )
                 }
             }
             
