@@ -127,6 +127,7 @@ class HomeViewModel(
                 val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
                 
                 if (lastTrackPoint != null) {
+                    // 保存されたロケール（あれば）を使用して住所を取得
                     val address = locationManager.getAddressFromLocation(
                         lastTrackPoint.latitude,
                         lastTrackPoint.longitude
@@ -136,9 +137,11 @@ class HomeViewModel(
                     _uiState.value = _uiState.value.copy(currentAddress = "位置情報がまだ記録されていません")
                 }
             } else {
-                // 停止中: 現在の位置情報をリクエストして取得
+                // 停止中: 現在の位置情報をリクエスト
                 val location = locationManager.getCurrentLocation()
                 if (location != null) {
+                    // 停止中にボタンが押されたとき、ロケールを更新してから住所を取得
+                    locationManager.updateCachedLocale(location.latitude, location.longitude)
                     val address = locationManager.getAddressFromLocation(
                         location.latitude,
                         location.longitude

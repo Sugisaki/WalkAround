@@ -14,6 +14,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +28,11 @@ class LocationManager(private val context: Context) {
 
     private val fusedLocationClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
+
+    companion object {
+        // 住所表示用のロケールを保持する変数
+        private var cachedLocale: Locale? = null
+    }
 
     @SuppressLint("MissingPermission") // Permissions are handled in HomeScreen
     fun requestLocationUpdates(): Flow<Location> = callbackFlow {
@@ -60,13 +66,9 @@ class LocationManager(private val context: Context) {
         }
     }
 
-    /**
-     * キャッシュを避けて、強制的に最新の位置を1回だけ取得する
-     */
     @SuppressLint("MissingPermission")
     suspend fun getCurrentLocation(): Location? = suspendCancellableCoroutine { continuation ->
-        // getCurrentLocation はキャッシュを返すことがあるため、
-        // 確実に最新を取得したい場合は短時間の LocationRequest (1回限定) を使用する
+        val cts = CancellationTokenSource()
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 0)
             .setMaxUpdates(1)
             .setDurationMillis(10000) // 最大10秒待機
@@ -90,50 +92,50 @@ class LocationManager(private val context: Context) {
             }
 
         continuation.invokeOnCancellation {
+            cts.cancel()
             fusedLocationClient.removeLocationUpdates(callback)
         }
     }
 
     /**
-     * 指定された座標の住所を取得する。
-     * まずデフォルトのLocaleで国コードを取得し、可能であればその国の言語設定で住所を取得し直す。
+     * 保持されているロケール（なければデフォルト）を使用して住所を取得する
      */
     suspend fun getAddressFromLocation(latitude: Double, longitude: Double): String? = withContext(Dispatchers.IO) {
-        // 1. まず国コードを取得するためにデフォルトのLocaleを使用
-        val initialGeocoder = Geocoder(context, Locale.getDefault())
+        Log.d("LocationManager", "getAddressFromLocation called for: $latitude, $longitude using locale: ${cachedLocale ?: "Default"}")
+        val locale = cachedLocale ?: Locale.getDefault()
+        val geocoder = Geocoder(context, locale)
         
         return@withContext try {
-            val firstAddress = getFirstAddress(initialGeocoder, latitude, longitude)
-            
-            if (firstAddress != null) {
-                val countryCode = firstAddress.countryCode
-                Log.d("LocationManager", "Country code detected: $countryCode")
-                
-                // 2. 国コードが取得できれば、その国のLocaleで再取得を試みる
-                // 非推奨のコンストラクタを避け、Locale.Builder を使用
-                val targetLocale = if (countryCode != null) {
-                    Locale.Builder().setRegion(countryCode).build()
-                } else {
-                    Locale.getDefault()
-                }
-                
-                val targetGeocoder = Geocoder(context, targetLocale)
-                val finalAddress = getFirstAddress(targetGeocoder, latitude, longitude)
-                
-                val result = finalAddress?.getAddressLine(0) ?: firstAddress.getAddressLine(0)
-                Log.d("LocationManager", "Final address: $result")
-                result
-            } else {
-                Log.w("LocationManager", "No address found for these coordinates")
-                "住所が見つかりませんでした"
-            }
+            val address = getAddressFromLocation(geocoder, latitude, longitude)
+            Log.d("LocationManager", "Result getAddressFromLocation : $address")
+            val result = address?.getAddressLine(0) ?: "住所が見つかりませんでした"
+            Log.d("LocationManager", "Final address: $result")
+            result
         } catch (e: Exception) {
             Log.e("LocationManager", "Geocoder error", e)
             "住所の取得に失敗しました"
         }
     }
 
-    private suspend fun getFirstAddress(geocoder: Geocoder, lat: Double, lng: Double): Address? {
+    /**
+     * 現在地から国コードを特定し、住所表示用のロケールを更新・保存する
+     */
+    suspend fun updateCachedLocale(latitude: Double, longitude: Double) {
+        Log.d("LocationManager", "updateCachedLocale called for: $latitude, $longitude")
+        val initialGeocoder = Geocoder(context, Locale.getDefault())
+        
+        try {
+            val firstAddress = getAddressFromLocation(initialGeocoder, latitude, longitude)
+            firstAddress?.countryCode?.let { countryCode ->
+                cachedLocale = Locale.Builder().setRegion(countryCode).build()
+                Log.d("LocationManager", "Locale updated and cached: $cachedLocale")
+            }
+        } catch (e: Exception) {
+            Log.e("LocationManager", "Failed to update cached locale", e)
+        }
+    }
+
+    private suspend fun getAddressFromLocation(geocoder: Geocoder, lat: Double, lng: Double): Address? {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 suspendCancellableCoroutine { continuation ->
@@ -152,7 +154,7 @@ class LocationManager(private val context: Context) {
                 geocoder.getFromLocation(lat, lng, 1)?.getOrNull(0)
             }
         } catch (e: Exception) {
-            Log.e("LocationManager", "getFirstAddress exception", e)
+            Log.e("LocationManager", "getAddressFromLocation exception", e)
             null
         }
     }

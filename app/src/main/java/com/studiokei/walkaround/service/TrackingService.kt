@@ -150,6 +150,13 @@ class TrackingService : Service() {
             )
             val insertedId = database.trackPointDao().insertTrackPoint(trackPoint)
             
+            // 走行開始後、最初のTrackPointを保存したときにロケールを更新する
+            if (trackPointCounter == 0) {
+                serviceScope.launch {
+                    locationManager.updateCachedLocale(location.latitude, location.longitude)
+                }
+            }
+            
             trackPointCounter++
             _currentTrackCount.value = trackPointCounter
             updateNotification("歩数: ${_currentSteps.value}, 位置情報: ${trackPointCounter}件")
