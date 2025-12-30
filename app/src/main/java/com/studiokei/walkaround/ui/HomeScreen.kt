@@ -249,7 +249,7 @@ fun HomeScreen(
 
                 if (uiState.sections.isNotEmpty()) {
                     Text(
-                        text = "過去のセクション",
+                        text = "走行セクション",
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Start
@@ -266,11 +266,43 @@ fun HomeScreen(
                                     .clickable { onSectionClick(summary.sectionId) }
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        text = dateTimeFormatter.format(Instant.ofEpochMilli(summary.startTimeMillis)),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = dateTimeFormatter.format(Instant.ofEpochMilli(summary.startTimeMillis)),
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Sec: ${summary.sectionId}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                    
+                                    val startCity = summary.startCityDisplay()
+                                    val destCity = summary.destinationCityDisplay()
+                                    
+                                    if (destCity != null) {
+                                        Text(
+                                            text = "🔴 $destCity",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    if (startCity != null) {
+                                        Text(
+                                            text = "🔵 $startCity",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween

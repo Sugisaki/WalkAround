@@ -169,11 +169,13 @@ class LocationManager(private val context: Context) {
         withContext(Dispatchers.IO) {
             val time = System.currentTimeMillis()
             var addressLine: String? = null
+            var adminArea: String? = null
             var name: String? = null
 
             if (lat != null && lng != null) {
                 val address = getLocaleAddress(lat, lng)
                 addressLine = address?.getAddressLine(0)
+                adminArea = address?.adminArea
                 
                 // featureName が数字と記号だけの場合は name を null にする
                 val fName = address?.featureName
@@ -191,7 +193,8 @@ class LocationManager(private val context: Context) {
                 lat = lat,
                 lng = lng,
                 name = name,
-                addressLine = addressLine
+                addressLine = addressLine,
+                adminArea = adminArea
             )
             database.addressDao().insert(record)
             Log.d("LocationManager", "AddressRecord saved: $record")

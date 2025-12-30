@@ -16,9 +16,23 @@ interface SectionDao {
             s.sectionId, 
             s.createdAtTimestamp as startTimeMillis, 
             COALESCE(ss.steps, 0) as steps,
-            (SELECT COUNT(*) FROM tracks t WHERE t.time >= s.createdAtTimestamp AND (s.trackEndId IS NULL OR t.id <= s.trackEndId)) as trackPointCount
+            (SELECT COUNT(*) FROM tracks t WHERE t.time >= s.createdAtTimestamp AND (s.trackEndId IS NULL OR t.id <= s.trackEndId)) as trackPointCount,
+            sar.addressLine as startAddressLine,
+            sar.adminArea as startAdminArea,
+            CASE WHEN dar.id != sar.id THEN dar.addressLine ELSE NULL END as destinationAddressLine,
+            CASE WHEN dar.id != sar.id THEN dar.adminArea ELSE NULL END as destinationAdminArea
         FROM sections s
         LEFT JOIN step_segments ss ON s.sectionId = ss.sectionId
+        LEFT JOIN (
+            SELECT sectionId, addressLine, adminArea, id
+            FROM address_records
+            WHERE id IN (SELECT MIN(id) FROM address_records WHERE sectionId IS NOT NULL GROUP BY sectionId)
+        ) sar ON s.sectionId = sar.sectionId
+        LEFT JOIN (
+            SELECT sectionId, addressLine, adminArea, id
+            FROM address_records
+            WHERE id IN (SELECT MAX(id) FROM address_records WHERE sectionId IS NOT NULL GROUP BY sectionId)
+        ) dar ON s.sectionId = dar.sectionId
         ORDER BY s.createdAtTimestamp DESC
     """)
     fun getSectionSummaries(): Flow<List<SectionSummary>>

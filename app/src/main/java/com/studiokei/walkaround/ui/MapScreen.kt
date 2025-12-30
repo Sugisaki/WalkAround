@@ -15,7 +15,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.studiokei.walkaround.data.database.AppDatabase
@@ -61,8 +64,22 @@ fun MapScreen(
             if (track.isNotEmpty()) {
                 Polyline(
                     points = track,
-                    color = Color.Blue,
+                    color = Color(0xFF006400), // DarkGreen (濃緑色)
                     width = 10f
+                )
+
+                // スタート地点に青い丸のマーク
+                Marker(
+                    state = MarkerState(position = track.first()),
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE),
+                    title = "スタート"
+                )
+
+                // 最後の地点に赤い丸のマーク
+                Marker(
+                    state = MarkerState(position = track.last()),
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                    title = "ゴール"
                 )
             }
         }

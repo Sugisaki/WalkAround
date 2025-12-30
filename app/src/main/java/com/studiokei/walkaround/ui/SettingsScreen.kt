@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,9 +18,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -55,11 +51,12 @@ fun SettingsScreen(
     val uiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(modifier = modifier) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding)) {
+        Column(modifier = Modifier.padding(innerPadding).padding(16.dp)) {
             Text(text = "アプリ設定", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Step Interval Setting
+            // Step Interval Setting (Hidden for now)
+            /*
             SettingCard {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -79,6 +76,7 @@ fun SettingsScreen(
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+            */
 
             // Median Filter Window Size Setting
             SettingCard {
@@ -163,7 +161,8 @@ fun SettingsScreen(
             }
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Dark Mode Setting
+            // Dark Mode Setting (Hidden for now)
+            /*
             SettingCard {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -178,8 +177,10 @@ fun SettingsScreen(
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+            */
 
-            // Notification Enabled Setting
+            // Notification Enabled Setting (Hidden for now)
+            /*
             SettingCard {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -194,6 +195,7 @@ fun SettingsScreen(
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+            */
 
             // Volume Setting
             SettingCard {

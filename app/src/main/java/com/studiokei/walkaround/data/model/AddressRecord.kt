@@ -13,5 +13,34 @@ data class AddressRecord(
     val lat: Double?,
     val lng: Double?,
     val name: String?,
-    val addressLine: String?
-)
+    val addressLine: String?,
+    val adminArea: String? = null
+) {
+    /**
+     * adminで表示される「県」とそれより大きな枠を表示しない
+     */
+    fun cityDisplay(): String? {
+        if (addressLine == null) return null
+        val admin = adminArea ?: return addressLine
+        val index = addressLine.indexOf(admin)
+        return if (index != -1) {
+            addressLine.substring(index + admin.length).trim().removePrefix("、").removePrefix(",").trim()
+        } else {
+            addressLine
+        }
+    }
+
+    /**
+     * adminで表示される「県」より大きな枠を表示しない
+     */
+    fun prefectureDisplay(): String? {
+        if (addressLine == null) return null
+        val admin = adminArea ?: return addressLine
+        val index = addressLine.indexOf(admin)
+        return if (index != -1) {
+            addressLine.substring(index).trim()
+        } else {
+            addressLine
+        }
+    }
+}

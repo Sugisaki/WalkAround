@@ -180,19 +180,35 @@ class TrackingService : Service() {
     }
 
     private fun stopTracking() {
+        if (!_isRunning.value) return
+        
         sensorJob?.cancel()
         locationJob?.cancel()
         _isRunning.value = false
+
+        val sessionId = currentSessionId
+        val steps = _currentSteps.value
+        val startT = startTime
 
         serviceScope.launch {
             val endTime = System.currentTimeMillis()
             val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
             
-            currentSessionId?.let { sessionId ->
+            if (sessionId != null) {
+                // 停止時の住所を保存
+                if (lastTrackPoint != null) {
+                    locationManager.saveAddressRecord(
+                        lat = lastTrackPoint.latitude,
+                        lng = lastTrackPoint.longitude,
+                        sectionId = sessionId,
+                        trackId = lastTrackPoint.id
+                    )
+                }
+
                 val stepSegment = StepSegment(
                     sectionId = sessionId,
-                    steps = _currentSteps.value,
-                    startTime = startTime,
+                    steps = steps,
+                    startTime = startT,
                     endTime = endTime
                 )
                 database.stepSegmentDao().insertStepSegment(stepSegment)
@@ -200,7 +216,7 @@ class TrackingService : Service() {
                 val section = database.sectionDao().getSectionById(sessionId)
                 section?.let {
                     val updatedSection = it.copy(
-                        durationSeconds = (endTime - startTime) / 1000,
+                        durationSeconds = (endTime - startT) / 1000,
                         trackEndId = lastTrackPoint?.id
                     )
                     database.sectionDao().updateSection(updatedSection)
