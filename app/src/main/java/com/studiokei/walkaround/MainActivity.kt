@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import com.studiokei.walkaround.ui.HomeScreen
 import com.studiokei.walkaround.ui.MapScreen
+import com.studiokei.walkaround.ui.RouteScreen
 import com.studiokei.walkaround.ui.SettingsScreen
 import com.studiokei.walkaround.ui.theme.WalkaroundTheme
 
@@ -72,6 +74,13 @@ fun WalkaroundApp() {
                         currentDestination = AppDestinations.MAP
                     }
                 )
+                AppDestinations.ROUTE -> RouteScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    onSectionClick = { sectionId ->
+                        selectedSectionId = sectionId
+                        currentDestination = AppDestinations.MAP
+                    }
+                )
                 AppDestinations.MAP -> MapScreen(
                     modifier = Modifier.padding(innerPadding),
                     sectionId = selectedSectionId
@@ -89,6 +98,7 @@ enum class AppDestinations(
     val icon: ImageVector,
 ) {
     HOME("Home", Icons.Default.Home),
+    ROUTE("Route", Icons.Default.List),
     MAP("Map", Icons.Default.Place),
     SETTINGS("Settings", Icons.Default.Settings),
 }
