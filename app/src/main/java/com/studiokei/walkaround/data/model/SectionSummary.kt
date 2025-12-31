@@ -5,6 +5,7 @@ data class SectionSummary(
     val startTimeMillis: Long,
     val steps: Int,
     val trackPointCount: Int,
+    val distanceMeters: Double? = null,
     val startAddressLine: String? = null,
     val startAdminArea: String? = null,
     val destinationAddressLine: String? = null,

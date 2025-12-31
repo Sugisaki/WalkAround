@@ -32,9 +32,13 @@ fun MapScreen(
         factory = viewModelFactory {
             initializer {
                 val application = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]!!
+                val database = AppDatabase.getDatabase(application)
+                val locationManager = LocationManager(application)
+                val sectionManager = SectionManager(database, locationManager)
                 MapViewModel(
-                    AppDatabase.getDatabase(application),
-                    LocationManager(application)
+                    database,
+                    locationManager,
+                    sectionManager
                 )
             }
         }

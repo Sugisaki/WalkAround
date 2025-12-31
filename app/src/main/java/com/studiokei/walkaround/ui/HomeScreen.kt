@@ -307,8 +307,19 @@ fun HomeScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Text(text = "歩数: ${summary.steps}", style = MaterialTheme.typography.bodyMedium)
-                                        Text(text = "Track数: ${summary.trackPointCount}", style = MaterialTheme.typography.bodyMedium)
+                                        Column {
+                                            Text(text = "歩数: ${summary.steps}", style = MaterialTheme.typography.bodyMedium)
+                                            summary.distanceMeters?.let { meters ->
+                                                val distanceDisplay = if (uiState.displayUnit == "mile") {
+                                                    val miles = meters / 1609.34
+                                                    "%.2f mile".format(miles)
+                                                } else {
+                                                    "%.2f km".format(meters / 1000.0)
+                                                }
+                                                Text(text = "距離: $distanceDisplay", style = MaterialTheme.typography.bodyMedium)
+                                            }
+                                        }
+                                        Text(text = "Track数: ${summary.trackPointCount}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.align(Alignment.Bottom))
                                     }
                                 }
                             }

@@ -29,7 +29,8 @@ data class HomeUiState(
     val currentAddress: String? = null,
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
     val hasHealthConnectPermissions: Boolean = false,
-    val sections: List<SectionSummary> = emptyList()
+    val sections: List<SectionSummary> = emptyList(),
+    val displayUnit: String = "km"
 )
 
 class HomeViewModel(
@@ -76,6 +77,11 @@ class HomeViewModel(
             val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             database.sectionDao().getTodayTotalSteps(startOfDay).onEach { count ->
                 _uiState.value = _uiState.value.copy(todayStepCount = count ?: 0)
+            }.launchIn(viewModelScope)
+
+            // 設定の監視（単位など）
+            database.settingsDao().getSettings().onEach { settings ->
+                _uiState.value = _uiState.value.copy(displayUnit = settings?.displayUnit ?: "km")
             }.launchIn(viewModelScope)
 
             _uiState.value = _uiState.value.copy(

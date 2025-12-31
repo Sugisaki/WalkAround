@@ -17,6 +17,7 @@ interface SectionDao {
             s.createdAtTimestamp as startTimeMillis, 
             COALESCE(ss.steps, 0) as steps,
             (SELECT COUNT(*) FROM tracks t WHERE t.time >= s.createdAtTimestamp AND (s.trackEndId IS NULL OR t.id <= s.trackEndId)) as trackPointCount,
+            s.distanceMeters,
             sar.addressLine as startAddressLine,
             sar.adminArea as startAdminArea,
             CASE WHEN dar.id != sar.id THEN dar.addressLine ELSE NULL END as destinationAddressLine,
