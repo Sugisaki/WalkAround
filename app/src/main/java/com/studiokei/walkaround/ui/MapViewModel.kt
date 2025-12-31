@@ -56,7 +56,36 @@ class MapViewModel(
                     )
                     .first()
 
-                Log.d("MapViewModel", "Track stats for Section ${section.sectionId}: Accurate Size = ${accurateTrackPoints.size} (Limit=${accuracyLimit})")
+                Log.d("MapViewModel", "Track stats for Section ${section.sectionId}: Accurate Size =${accurateTrackPoints.size} (Limit=${accuracyLimit})")
+
+                // 最初と最後の地点の住所が保存されているか個別に確認し、なければ保存
+                if (accurateTrackPoints.isNotEmpty()) {
+                    val firstPoint = accurateTrackPoints.first()
+                    val firstAddress = database.addressDao().getAddressBySectionAndTrack(section.sectionId, firstPoint.id)
+                    if (firstAddress == null) {
+                        Log.d("MapViewModel", "No start address record found for section ${section.sectionId}. Fetching...")
+                        locationManager.saveAddressRecord(
+                            lat = firstPoint.latitude,
+                            lng = firstPoint.longitude,
+                            sectionId = section.sectionId,
+                            trackId = firstPoint.id
+                        )
+                    }
+
+                    if (accurateTrackPoints.size > 1) {
+                        val lastPoint = accurateTrackPoints.last()
+                        val lastAddress = database.addressDao().getAddressBySectionAndTrack(section.sectionId, lastPoint.id)
+                        if (lastAddress == null) {
+                            Log.d("MapViewModel", "No end address record found for section ${section.sectionId}. Fetching...")
+                            locationManager.saveAddressRecord(
+                                lat = lastPoint.latitude,
+                                lng = lastPoint.longitude,
+                                sectionId = section.sectionId,
+                                trackId = lastPoint.id
+                            )
+                        }
+                    }
+                }
 
                 val rawLatLngs = accurateTrackPoints.map { LatLng(it.latitude, it.longitude) }
                 if (rawLatLngs.size > 1) {

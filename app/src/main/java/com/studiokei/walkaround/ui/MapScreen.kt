@@ -71,7 +71,7 @@ fun MapScreen(
                 // スタート地点に青い丸のマーク
                 Marker(
                     state = MarkerState(position = track.first()),
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE),
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
                     title = "スタート"
                 )
 

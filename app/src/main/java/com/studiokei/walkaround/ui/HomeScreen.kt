@@ -295,7 +295,7 @@ fun HomeScreen(
                                     }
                                     if (startCity != null) {
                                         Text(
-                                            text = "🔵 $startCity",
+                                            text = "⬆️ $startCity",
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.secondary
                                         )
