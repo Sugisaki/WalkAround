@@ -164,10 +164,11 @@ class LocationManager(private val context: Context) {
         lat: Double?,
         lng: Double?,
         sectionId: Long? = null,
-        trackId: Long? = null
+        trackId: Long? = null,
+        timestamp: Long? = null
     ) {
         withContext(Dispatchers.IO) {
-            val time = System.currentTimeMillis()
+            val time = timestamp ?: System.currentTimeMillis()
             var addressLine: String? = null
             var adminArea: String? = null
             var name: String? = null

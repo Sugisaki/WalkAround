@@ -97,8 +97,9 @@ fun SectionBlock(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary
                     )
+                    // cityDisplay() を使用して、市町村以下の住所を表示
                     Text(
-                        text = record.addressLine ?: record.name ?: "不明な住所",
+                        text = record.cityDisplay() ?: record.name ?: "不明な住所",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

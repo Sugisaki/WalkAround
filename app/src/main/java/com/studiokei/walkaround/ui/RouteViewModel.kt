@@ -24,9 +24,14 @@ class RouteViewModel(
 
     val uiState: StateFlow<RouteUiState> = database.addressDao().getAllAddressRecords()
         .map { records ->
+            // sectionId ごとにグループ化し、sectionId の降順（新しい順）で並べ替える
+            // sectionId が null のものは最後に配置
             val grouped = records.groupBy { it.sectionId }
+                .entries
+                .sortedWith(compareByDescending<Map.Entry<Long?, List<AddressRecord>>> { it.key }.thenBy { 0 })
                 .map { (sectionId, addresses) ->
-                    SectionGroup(sectionId, addresses)
+                    // 各グループ内の住所も時間順（新しい順）に並んでいることを確認
+                    SectionGroup(sectionId, addresses.sortedByDescending { it.time })
                 }
             RouteUiState(grouped)
         }

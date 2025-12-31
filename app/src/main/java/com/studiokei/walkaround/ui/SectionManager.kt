@@ -70,7 +70,8 @@ class SectionManager(
                 lat = firstPoint.latitude,
                 lng = firstPoint.longitude,
                 sectionId = section.sectionId,
-                trackId = firstPoint.id
+                trackId = firstPoint.id,
+                timestamp = firstPoint.time
             )
         }
 
@@ -83,7 +84,8 @@ class SectionManager(
                     lat = lastPoint.latitude,
                     lng = lastPoint.longitude,
                     sectionId = section.sectionId,
-                    trackId = lastPoint.id
+                    trackId = lastPoint.id,
+                    timestamp = lastPoint.time
                 )
             }
         }

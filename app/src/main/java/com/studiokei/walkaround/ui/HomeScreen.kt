@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -276,11 +277,19 @@ fun HomeScreen(
                                             style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        Text(
-                                            text = "Sec: ${summary.sectionId}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Track: ${summary.trackPointCount}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.secondary
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Sec: ${summary.sectionId}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.secondary
+                                            )
+                                        }
                                     }
                                     
                                     val startCity = summary.startCityDisplay()
@@ -305,21 +314,29 @@ fun HomeScreen(
 
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Column {
-                                            Text(text = "歩数: ${summary.steps}", style = MaterialTheme.typography.bodyMedium)
-                                            summary.distanceMeters?.let { meters ->
-                                                val distanceDisplay = if (uiState.displayUnit == "mile") {
-                                                    val miles = meters / 1609.34
-                                                    "%.2f mile".format(miles)
-                                                } else {
-                                                    "%.2f km".format(meters / 1000.0)
-                                                }
-                                                Text(text = "距離: $distanceDisplay", style = MaterialTheme.typography.bodyMedium)
+                                        // 距離を左側に表示
+                                        if (summary.distanceMeters != null) {
+                                            val meters = summary.distanceMeters
+                                            val distanceDisplay = if (uiState.displayUnit == "mile") {
+                                                val miles = meters / 1609.34
+                                                "%.2f mile".format(miles)
+                                            } else {
+                                                "%.2f km".format(meters / 1000.0)
                                             }
+                                            Text(text = "距離: $distanceDisplay", style = MaterialTheme.typography.bodyMedium)
+                                        } else {
+                                            // 距離がない場合も位置を保つための空のSpacer
+                                            Spacer(modifier = Modifier.weight(1f))
                                         }
-                                        Text(text = "Track数: ${summary.trackPointCount}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.align(Alignment.Bottom))
+                                        // 歩数を右側に表示
+                                        Text(
+                                            text = "歩数: ${summary.steps}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            textAlign = TextAlign.End
+                                        )
                                     }
                                 }
                             }
