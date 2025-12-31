@@ -24,7 +24,8 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
                         isDarkMode = it.isDarkMode,
                         isNotificationEnabled = it.isNotificationEnabled,
                         volume = it.volume,
-                        medianWindowSize = it.medianWindowSize
+                        medianWindowSize = it.medianWindowSize,
+                        locationAccuracyLimit = it.locationAccuracyLimit
                     )
                 } ?: SettingsUiState() // Default values if no settings found
             }
@@ -61,6 +62,11 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
         saveSettings()
     }
 
+    fun updateLocationAccuracyLimit(limit: Float) {
+        _uiState.value = _uiState.value.copy(locationAccuracyLimit = limit)
+        saveSettings()
+    }
+
     private fun saveSettings() {
         viewModelScope.launch {
             val currentSettings = _uiState.value
@@ -71,7 +77,8 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
                     isDarkMode = currentSettings.isDarkMode,
                     isNotificationEnabled = currentSettings.isNotificationEnabled,
                     volume = currentSettings.volume,
-                    medianWindowSize = currentSettings.medianWindowSize
+                    medianWindowSize = currentSettings.medianWindowSize,
+                    locationAccuracyLimit = currentSettings.locationAccuracyLimit
                 )
             )
         }
@@ -84,5 +91,6 @@ data class SettingsUiState(
     val isDarkMode: Boolean = false,
     val isNotificationEnabled: Boolean = true,
     val volume: Float = 0.5f,
-    val medianWindowSize: Int = 7
+    val medianWindowSize: Int = 7,
+    val locationAccuracyLimit: Float = 20.0f
 )

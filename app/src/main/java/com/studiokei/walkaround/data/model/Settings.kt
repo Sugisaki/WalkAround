@@ -1,5 +1,6 @@
 package com.studiokei.walkaround.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -25,5 +26,9 @@ data class Settings(
 
     // メディアンフィルタの窓サイズ (0, 3, 5, 7, 9, 11, 13, 15, 17, 19)
     // 0の場合はフィルタを適用しない
-    val medianWindowSize: Int = 7
+    val medianWindowSize: Int = 7,
+
+    // 位置情報の許容精度 (m)
+    @ColumnInfo(defaultValue = "20.0")
+    val locationAccuracyLimit: Float = 20.0f
 )

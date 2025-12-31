@@ -45,6 +45,7 @@ class TrackingService : Service() {
     private var sensorJob: Job? = null
     private var locationJob: Job? = null
     private var trackPointCounter = 0
+    private var isStartAddressSaved = false
 
     private val _currentSteps = MutableStateFlow(0)
     val currentSteps: StateFlow<Int> = _currentSteps.asStateFlow()
@@ -86,6 +87,7 @@ class TrackingService : Service() {
         _currentSteps.value = 0
         _currentTrackCount.value = 0
         trackPointCounter = 0
+        isStartAddressSaved = false
         startTime = System.currentTimeMillis()
 
         // 権限の状態を確認して、フォアグラウンドサービスのタイプを決定する
@@ -150,9 +152,10 @@ class TrackingService : Service() {
             )
             val insertedId = database.trackPointDao().insertTrackPoint(trackPoint)
             
-            // 走行開始後、最初のTrackPointを保存したときにロケールを更新し、住所を保存する
-            if (trackPointCounter == 0) {
+            // 精度が一定以上の最初のTrackPointが得られた時に、住所を保存する
+            if (!isStartAddressSaved && location.accuracy <= ACCURACY_LIMIT) {
                 val sessionId = currentSessionId
+                isStartAddressSaved = true
                 serviceScope.launch {
                     locationManager.updateCachedLocale(location.latitude, location.longitude)
                     locationManager.saveAddressRecord(
@@ -192,16 +195,18 @@ class TrackingService : Service() {
 
         serviceScope.launch {
             val endTime = System.currentTimeMillis()
+            // 精度が一定以上の最後のTrackPointを取得して住所を保存する
+            val lastAccuratePoint = database.trackPointDao().getLastAccurateTrackPoint(ACCURACY_LIMIT)
             val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
             
             if (sessionId != null) {
-                // 停止時の住所を保存
-                if (lastTrackPoint != null) {
+                // 停止時の住所を保存（精度の高い地点があればそれを使う）
+                if (lastAccuratePoint != null) {
                     locationManager.saveAddressRecord(
-                        lat = lastTrackPoint.latitude,
-                        lng = lastTrackPoint.longitude,
+                        lat = lastAccuratePoint.latitude,
+                        lng = lastAccuratePoint.longitude,
                         sectionId = sessionId,
-                        trackId = lastTrackPoint.id
+                        trackId = lastAccuratePoint.id
                     )
                 }
 
@@ -261,5 +266,6 @@ class TrackingService : Service() {
         const val ACTION_STOP = "ACTION_STOP"
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "tracking_channel"
+        private const val ACCURACY_LIMIT = 20.0f
     }
 }

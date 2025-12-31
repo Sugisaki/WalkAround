@@ -119,6 +119,25 @@ fun SettingsScreen(
             }
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Location Accuracy Limit Setting
+            SettingCard {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("位置情報の許容精度 (m): ${"%.1f".format(uiState.locationAccuracyLimit)}")
+                    Slider(
+                        value = uiState.locationAccuracyLimit,
+                        onValueChange = { settingsViewModel.updateLocationAccuracyLimit(it) },
+                        valueRange = 5f..100f,
+                        steps = 18 // 5.0, 10.0, ..., 100.0 (5m刻み)
+                    )
+                    Text(
+                        text = "この値より精度の低い（誤差が大きい）データは地図や住所取得に使用されません。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
             // Display Unit Setting
             SettingCard {
                 Column(modifier = Modifier.selectableGroup()) {

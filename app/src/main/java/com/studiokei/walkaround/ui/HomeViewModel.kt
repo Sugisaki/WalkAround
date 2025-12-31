@@ -14,6 +14,7 @@ import com.studiokei.walkaround.ui.StepSensorManager.SensorMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -122,9 +123,12 @@ class HomeViewModel(
         _uiState.value = _uiState.value.copy(currentAddress = "取得中...")
 
         viewModelScope.launch {
+            val settings = database.settingsDao().getSettings().first()
+            val accuracyLimit = settings?.locationAccuracyLimit ?: 20.0f
+
             if (_uiState.value.isRunning) {
-                // 走行中: DBから最後に保存された TrackPoint を取得
-                val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
+                // 走行中: DBから最後に保存された、精度の高い TrackPoint を取得
+                val lastTrackPoint = database.trackPointDao().getLastAccurateTrackPoint(accuracyLimit)
                 
                 if (lastTrackPoint != null) {
                     // 保存されたロケール（あれば）を使用して住所を取得
@@ -134,12 +138,13 @@ class HomeViewModel(
                     )
                     _uiState.value = _uiState.value.copy(currentAddress = address?.getAddressLine(0))
                 } else {
-                    _uiState.value = _uiState.value.copy(currentAddress = "位置情報がまだ記録されていません")
+                    _uiState.value = _uiState.value.copy(currentAddress = "精度の高い位置情報がまだ記録されていません")
                 }
             } else {
                 // 停止中: 現在の位置情報をリクエスト
                 val location = locationManager.getCurrentLocation()
-                if (location != null) {
+                // 停止中も精度をチェックするかどうかは要件次第だが、一貫性のためにチェックする
+                if (location != null && location.accuracy <= accuracyLimit) {
                     // 停止中にボタンが押されたとき、ロケールを更新してから住所を取得
                     locationManager.updateCachedLocale(location.latitude, location.longitude)
                     val address = locationManager.getLocaleAddress(
@@ -153,6 +158,8 @@ class HomeViewModel(
                         lat = location.latitude,
                         lng = location.longitude
                     )
+                } else if (location != null) {
+                    _uiState.value = _uiState.value.copy(currentAddress = "位置情報の精度が不十分です (${location.accuracy}m)")
                 } else {
                     _uiState.value = _uiState.value.copy(currentAddress = "現在地を取得できませんでした")
                 }

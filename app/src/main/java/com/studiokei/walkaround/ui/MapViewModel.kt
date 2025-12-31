@@ -42,16 +42,24 @@ class MapViewModel(
             Log.d("MapViewModel", "Section found: $section")
 
             if (section != null && section.trackStartId != null && section.trackEndId != null) {
-                val trackPoints = database.trackPointDao()
-                    .getTrackPointsForSection(section.trackStartId, section.trackEndId)
+                // 設定から許容精度と窓サイズを取得
+                val settings = database.settingsDao().getSettings().first()
+                val accuracyLimit = settings?.locationAccuracyLimit ?: 20.0f
+                val windowSize = settings?.medianWindowSize ?: 7
+
+                // データベースから精度でフィルタリングされた地点を直接取得
+                val accurateTrackPoints = database.trackPointDao()
+                    .getAccurateTrackPointsForSection(
+                        section.trackStartId,
+                        section.trackEndId,
+                        accuracyLimit
+                    )
                     .first()
 
-                val rawLatLngs = trackPoints.map { LatLng(it.latitude, it.longitude) }
+                Log.d("MapViewModel", "Track stats for Section ${section.sectionId}: Accurate Size = ${accurateTrackPoints.size} (Limit=${accuracyLimit})")
+
+                val rawLatLngs = accurateTrackPoints.map { LatLng(it.latitude, it.longitude) }
                 if (rawLatLngs.size > 1) {
-                    // 設定から窓サイズを取得
-                    val settings = database.settingsDao().getSettings().first()
-                    val windowSize = settings?.medianWindowSize ?: 7
-                    
                     // 窓サイズが0より大きい場合のみフィルタを適用
                     val filteredLatLngs = if (windowSize > 0) {
                         applyMedianFilter(rawLatLngs, windowSize = windowSize)

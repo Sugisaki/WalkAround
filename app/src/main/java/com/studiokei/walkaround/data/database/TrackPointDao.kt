@@ -11,6 +11,9 @@ interface TrackPointDao {
     @Query("SELECT * FROM tracks WHERE id BETWEEN :startId AND :endId ORDER BY time ASC")
     fun getTrackPointsForSection(startId: Long, endId: Long): Flow<List<TrackPoint>>
 
+    @Query("SELECT * FROM tracks WHERE id BETWEEN :startId AND :endId AND accuracy <= :accuracyLimit ORDER BY time ASC")
+    fun getAccurateTrackPointsForSection(startId: Long, endId: Long, accuracyLimit: Float): Flow<List<TrackPoint>>
+
     @Query("SELECT COUNT(*) FROM tracks")
     fun getTrackPointCount(): Flow<Int>
 
@@ -25,4 +28,7 @@ interface TrackPointDao {
 
     @Query("SELECT * FROM tracks ORDER BY id DESC LIMIT 1")
     suspend fun getLastTrackPoint(): TrackPoint?
+
+    @Query("SELECT * FROM tracks WHERE accuracy <= :accuracyLimit ORDER BY id DESC LIMIT 1")
+    suspend fun getLastAccurateTrackPoint(accuracyLimit: Float): TrackPoint?
 }
