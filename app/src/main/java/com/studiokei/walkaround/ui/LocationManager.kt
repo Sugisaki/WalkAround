@@ -31,10 +31,31 @@ class LocationManager(private val context: Context) {
     private val fusedLocationClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
     private val database: AppDatabase = AppDatabase.getDatabase(context)
+    private val prefs = context.getSharedPreferences("location_prefs", Context.MODE_PRIVATE)
 
     companion object {
-        // 住所表示用のロケールを保持する変数
-        private var cachedLocale: Locale? = null
+        private const val PREF_KEY_COUNTRY_CODE = "cached_country_code"
+        // メモリ上のキャッシュ（パフォーマンスのため）
+        private var memoryCachedLocale: Locale? = null
+    }
+
+    private fun getCachedLocale(): Locale {
+        memoryCachedLocale?.let { return it }
+        
+        val countryCode = prefs.getString(PREF_KEY_COUNTRY_CODE, null)
+        return if (countryCode != null) {
+            Locale.Builder().setRegion(countryCode).build().also {
+                memoryCachedLocale = it
+            }
+        } else {
+            Locale.getDefault()
+        }
+    }
+
+    private fun setCachedLocale(countryCode: String) {
+        prefs.edit().putString(PREF_KEY_COUNTRY_CODE, countryCode).apply()
+        memoryCachedLocale = Locale.Builder().setRegion(countryCode).build()
+        Log.d("LocationManager", "Locale updated and persisted: $memoryCachedLocale")
     }
 
     @SuppressLint("MissingPermission") // Permissions are handled in HomeScreen
@@ -104,13 +125,29 @@ class LocationManager(private val context: Context) {
      * 保持されているロケール（なければデフォルト）を使用して住所オブジェクトを取得する
      */
     suspend fun getLocaleAddress(latitude: Double, longitude: Double): Address? = withContext(Dispatchers.IO) {
-        Log.d("LocationManager", "getLocaleAddress called for: $latitude, $longitude using locale: ${cachedLocale ?: "Default"}")
-        val locale = cachedLocale ?: Locale.getDefault()
+        val locale = getCachedLocale()
+        Log.d("LocationManager", "getLocaleAddress called for: $latitude, $longitude using locale: $locale")
         val geocoder = Geocoder(context, locale)
         
         return@withContext try {
             val address = getAddressInternal(geocoder, latitude, longitude)
-            Log.d("LocationManager", "Result getLocaleAddress : $address")
+            if (address != null) {
+                Log.d("LocationManager", """
+                    Result getLocaleAddress:
+                      Country: ${address.countryName} (${address.countryCode})
+                      AdminArea: ${address.adminArea}
+                      SubAdminArea: ${address.subAdminArea}
+                      Locality: ${address.locality}
+                      SubLocality: ${address.subLocality}
+                      Thoroughfare: ${address.thoroughfare}
+                      SubThoroughfare: ${address.subThoroughfare}
+                      FeatureName: ${address.featureName}
+                      PostalCode: ${address.postalCode}
+                      AddressLine(0): ${address.getAddressLine(0)}
+                """.trimIndent())
+            } else {
+                Log.d("LocationManager", "Result getLocaleAddress : null")
+            }
             address
         } catch (e: Exception) {
             Log.e("LocationManager", "Geocoder error", e)
@@ -128,8 +165,7 @@ class LocationManager(private val context: Context) {
         try {
             val firstAddress = getAddressInternal(initialGeocoder, latitude, longitude)
             firstAddress?.countryCode?.let { countryCode ->
-                cachedLocale = Locale.Builder().setRegion(countryCode).build()
-                Log.d("LocationManager", "Locale updated and cached: $cachedLocale")
+                setCachedLocale(countryCode)
             }
         } catch (e: Exception) {
             Log.e("LocationManager", "Failed to update cached locale", e)
