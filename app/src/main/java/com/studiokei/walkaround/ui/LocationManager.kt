@@ -157,9 +157,13 @@ class LocationManager(private val context: Context) {
 
     /**
      * 住所オブジェクトから比較用のキー（丁目レベル）を生成します。
+     * 比較用の文字列は、市区町村 + 町村 + 丁目/番地
      */
     fun getAddressKey(address: Address?): String {
-        return address?.thoroughfare ?: address?.subThoroughfare ?: ""
+        val locality = address?.locality ?: ""
+        val subLocality = address?.subLocality ?: ""
+        val thoroughfare = address?.thoroughfare ?: address?.subThoroughfare ?: ""
+        return "$locality$subLocality$thoroughfare"
     }
 
     /**
@@ -246,11 +250,23 @@ class LocationManager(private val context: Context) {
             var addressLine: String? = null
             var adminArea: String? = null
             var name: String? = null
+            var countryName: String? = null
+            var locality: String? = null
+            var subLocality: String? = null
+            var thoroughfare: String? = null
+            var subThoroughfare: String? = null
+            var postalCode: String? = null
 
             if (lat != null && lng != null) {
                 val address = getLocaleAddress(lat, lng)
                 addressLine = address?.getAddressLine(0)
                 adminArea = address?.adminArea
+                countryName = address?.countryName
+                locality = address?.locality
+                subLocality = address?.subLocality
+                thoroughfare = address?.thoroughfare
+                subThoroughfare = address?.subThoroughfare
+                postalCode = address?.postalCode
                 
                 // featureName が数字と記号だけの場合は name を null にする
                 val fName = address?.featureName
@@ -269,7 +285,13 @@ class LocationManager(private val context: Context) {
                 lng = lng,
                 name = name,
                 addressLine = addressLine,
-                adminArea = adminArea
+                adminArea = adminArea,
+                countryName = countryName,
+                locality = locality,
+                subLocality = subLocality,
+                thoroughfare = thoroughfare,
+                subThoroughfare = subThoroughfare,
+                postalCode = postalCode
             )
             database.addressDao().insert(record)
             Log.d("LocationManager", "AddressRecord saved: $record")

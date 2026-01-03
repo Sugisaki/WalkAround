@@ -14,7 +14,13 @@ data class AddressRecord(
     val lng: Double?,
     val name: String?,
     val addressLine: String?,
-    val adminArea: String? = null
+    val adminArea: String? = null,
+    val countryName: String? = null,
+    val locality: String? = null,
+    val subLocality: String? = null,
+    val thoroughfare: String? = null,
+    val subThoroughfare: String? = null,
+    val postalCode: String? = null
 ) {
     /**
      * adminで表示される「県」とそれより大きな枠を表示しない

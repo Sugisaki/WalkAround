@@ -15,10 +15,11 @@ import com.studiokei.walkaround.data.model.TrackPoint
 
 @Database(
     entities = [Settings::class, TrackPoint::class, Section::class, StepSegment::class, AddressRecord::class],
-    version = 10,
+    version = 11,
     autoMigrations = [
         AutoMigration(from = 7, to = 8),
-        AutoMigration(from = 8, to = 9)
+        AutoMigration(from = 8, to = 9),
+        AutoMigration(from = 10, to = 11)
     ],
     exportSchema = true
 )
@@ -36,7 +37,6 @@ abstract class AppDatabase : RoomDatabase() {
         // バージョン9から10への手動Migration
         private val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // app_settings テーブルに locationAccuracyLimit カラムをデフォルト値 20.0 で追加
                 db.execSQL("ALTER TABLE app_settings ADD COLUMN locationAccuracyLimit REAL NOT NULL DEFAULT 20.0")
             }
         }
@@ -48,7 +48,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "app_database"
                 )
-                .addMigrations(MIGRATION_9_10) // 手動Migrationを追加
+                .addMigrations(MIGRATION_9_10)
                 .build()
                 INSTANCE = instance
                 instance
