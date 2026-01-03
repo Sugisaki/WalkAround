@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class RouteUiState(
     val groupedAddresses: List<SectionGroup> = emptyList()
@@ -19,7 +20,8 @@ data class SectionGroup(
 )
 
 class RouteViewModel(
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val sectionManager: SectionManager
 ) : ViewModel() {
 
     val uiState: StateFlow<RouteUiState> = database.addressDao().getAllAddressRecords()
@@ -40,4 +42,10 @@ class RouteViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = RouteUiState()
         )
+
+    fun updateSectionAddresses(sectionId: Long) {
+        viewModelScope.launch {
+            sectionManager.updateThoroughfareAddresses(sectionId)
+        }
+    }
 }

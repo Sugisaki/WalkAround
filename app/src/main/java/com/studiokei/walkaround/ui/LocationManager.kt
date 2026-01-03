@@ -39,7 +39,7 @@ class LocationManager(private val context: Context) {
         private var memoryCachedLocale: Locale? = null
     }
 
-    private fun getCachedLocale(): Locale {
+    private fun getCachedLocale(): Locale? {
         memoryCachedLocale?.let { return it }
         
         val countryCode = prefs.getString(PREF_KEY_COUNTRY_CODE, null)
@@ -48,7 +48,7 @@ class LocationManager(private val context: Context) {
                 memoryCachedLocale = it
             }
         } else {
-            Locale.getDefault()
+            null
         }
     }
 
@@ -63,10 +63,11 @@ class LocationManager(private val context: Context) {
         Log.d("LocationManager", "requestLocationUpdates called")
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
-            1000L // 1 second interval
+            1000L // 1 秒ごとに位置情報が欲しい
         )
             .setWaitForAccurateLocation(false)
-            .setMinUpdateIntervalMillis(500L) // Minimum interval of 0.5 seconds
+            .setMinUpdateIntervalMillis(1000L) // 更新は最短でも1秒あけて
+            .setMinUpdateDistanceMeters(2f)    // 2メートル以上動かないと更新しないで
             .build()
 
         val locationCallback = object : LocationCallback() {
@@ -125,7 +126,7 @@ class LocationManager(private val context: Context) {
      * 保持されているロケール（なければデフォルト）を使用して住所オブジェクトを取得する
      */
     suspend fun getLocaleAddress(latitude: Double, longitude: Double): Address? = withContext(Dispatchers.IO) {
-        val locale = getCachedLocale()
+        val locale = getCachedLocale() ?: Locale.getDefault()
         Log.d("LocationManager", "getLocaleAddress called for: $latitude, $longitude using locale: $locale")
         val geocoder = Geocoder(context, locale)
         
@@ -136,7 +137,6 @@ class LocationManager(private val context: Context) {
                     Result getLocaleAddress:
                       Country: ${address.countryName} (${address.countryCode})
                       AdminArea: ${address.adminArea}
-                      SubAdminArea: ${address.subAdminArea}
                       Locality: ${address.locality}
                       SubLocality: ${address.subLocality}
                       Thoroughfare: ${address.thoroughfare}
@@ -153,6 +153,44 @@ class LocationManager(private val context: Context) {
             Log.e("LocationManager", "Geocoder error", e)
             null
         }
+    }
+
+    /**
+     * 住所オブジェクトから比較用のキー（丁目レベル）を生成します。
+     */
+    fun getAddressKey(address: Address?): String {
+        return address?.thoroughfare ?: address?.subThoroughfare ?: ""
+    }
+
+    /**
+     * 住所を取得し、前回保存されたキーと異なる場合にのみ保存します。
+     * @return 新しい住所キー。変化がなかった場合や取得失敗時は null。
+     */
+    suspend fun saveAddressIfThoroughfareChanged(
+        lat: Double,
+        lng: Double,
+        sectionId: Long?,
+        trackId: Long?,
+        timestamp: Long,
+        lastAddressKey: String?
+    ): String? {
+        val address = getLocaleAddress(lat, lng) ?: return null // 取得失敗時は判定をスキップ
+        val currentKey = getAddressKey(address)
+        
+        Log.d("LocationManager", "Comparing address keys: current='$currentKey', last='$lastAddressKey'")
+        
+        if (currentKey != lastAddressKey) {
+            Log.d("LocationManager", "Address key changed. Saving address.")
+            saveAddressRecord(
+                lat = lat,
+                lng = lng,
+                sectionId = sectionId,
+                trackId = trackId,
+                timestamp = timestamp
+            )
+            return currentKey
+        }
+        return null
     }
 
     /**

@@ -6,6 +6,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.data.model.Section
 import com.studiokei.walkaround.data.model.TrackPoint
+import com.studiokei.walkaround.util.Constants
 import com.studiokei.walkaround.util.applyMedianFilter
 import kotlinx.coroutines.flow.first
 
@@ -35,7 +36,7 @@ class SectionManager(
 
         if (accurateTrackPoints.isEmpty()) return emptyList()
 
-        // 住所の補完
+        // 住所の補完 (開始・終了地点)
         ensureAddressesSaved(section, accurateTrackPoints)
 
         // 軌跡の生成と平滑化
@@ -54,6 +55,83 @@ class SectionManager(
         }
 
         return filteredTrack
+    }
+
+    /**
+     * セクションの全TrackPointを走査し、住所の変化点となる住所を取得・保存します。
+     * 実行前に、当該セクションの既存住所データをすべて削除します。
+     */
+    suspend fun updateThoroughfareAddresses(sectionId: Long) {
+        val section = database.sectionDao().getSectionById(sectionId) ?: return
+        val startId = section.trackStartId ?: return
+        val endId = section.trackEndId ?: return
+
+        // 既存の住所データを削除してクリーンアップ
+        Log.d("SectionManager", "Clearing existing address records for section $sectionId before update.")
+        database.addressDao().deleteAddressesBySection(sectionId)
+
+        // 全トラックデータを取得
+        val allPoints = database.trackPointDao().getTrackPointsForSection(startId, endId).first()
+        if (allPoints.isEmpty()) return
+
+        Log.d("SectionManager", "Starting thoroughfare analysis for section $sectionId. Total points: ${allPoints.size}")
+
+        var lastProcessedTime = 0L
+        var lastAddressKey: String? = null
+        var lastSavedTrackId: Long = -1
+
+        // 1. 最初の住所を取得・保存 (trackStartId)
+        val firstPoint = allPoints.first()
+        val firstAddress = locationManager.getLocaleAddress(firstPoint.latitude, firstPoint.longitude)
+        lastAddressKey = locationManager.getAddressKey(firstAddress)
+        lastProcessedTime = firstPoint.time
+        
+        locationManager.saveAddressRecord(
+            lat = firstPoint.latitude,
+            lng = firstPoint.longitude,
+            sectionId = sectionId,
+            trackId = firstPoint.id,
+            timestamp = firstPoint.time
+        )
+        lastSavedTrackId = firstPoint.id
+
+        // 2. 続くデータを繰り返し処理
+        for (i in 1 until allPoints.size) {
+            val point = allPoints[i]
+            
+            // 前のデータから指定時間以上経過しているか
+            if (point.time - lastProcessedTime >= Constants.ADDRESS_PROCESS_INTERVAL_MS) {
+                val newKey = locationManager.saveAddressIfThoroughfareChanged(
+                    lat = point.latitude,
+                    lng = point.longitude,
+                    sectionId = sectionId,
+                    trackId = point.id,
+                    timestamp = point.time,
+                    lastAddressKey = lastAddressKey
+                )
+                
+                if (newKey != null) {
+                    lastAddressKey = newKey
+                    lastSavedTrackId = point.id
+                }
+                lastProcessedTime = point.time
+            }
+        }
+
+        // 3. 最後の住所を保存 (trackEndId)
+        val lastPoint = allPoints.last()
+        if (lastSavedTrackId != lastPoint.id) {
+            Log.d("SectionManager", "Saving final address for section $sectionId at point ${lastPoint.id}.")
+            locationManager.saveAddressRecord(
+                lat = lastPoint.latitude,
+                lng = lastPoint.longitude,
+                sectionId = sectionId,
+                trackId = lastPoint.id,
+                timestamp = lastPoint.time
+            )
+        }
+
+        Log.d("SectionManager", "Thoroughfare analysis completed for section $sectionId")
     }
 
     /**

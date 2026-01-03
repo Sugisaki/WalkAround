@@ -20,6 +20,9 @@ interface AddressDao {
     @Query("SELECT * FROM address_records WHERE sectionId = :sectionId AND trackId = :trackId LIMIT 1")
     suspend fun getAddressBySectionAndTrack(sectionId: Long, trackId: Long): AddressRecord?
 
+    @Query("DELETE FROM address_records WHERE sectionId = :sectionId")
+    suspend fun deleteAddressesBySection(sectionId: Long)
+
     @Query("DELETE FROM address_records")
     suspend fun deleteAll()
 }

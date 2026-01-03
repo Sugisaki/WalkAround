@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.studiokei.walkaround.R
@@ -21,12 +22,14 @@ import com.studiokei.walkaround.data.model.TrackPoint
 import com.studiokei.walkaround.ui.HealthConnectManager
 import com.studiokei.walkaround.ui.LocationManager
 import com.studiokei.walkaround.ui.StepSensorManager
+import com.studiokei.walkaround.util.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -46,6 +49,11 @@ class TrackingService : Service() {
     private var locationJob: Job? = null
     private var trackPointCounter = 0
     private var isStartAddressSaved = false
+    
+    // 住所の動的保存用
+    private var lastThoroughfareKey: String? = null
+    private var lastAddressProcessTime: Long = 0L
+    private var accuracyLimit: Float = 20.0f
 
     private val _currentSteps = MutableStateFlow(0)
     val currentSteps: StateFlow<Int> = _currentSteps.asStateFlow()
@@ -70,6 +78,14 @@ class TrackingService : Service() {
         locationManager = LocationManager(this)
 
         createNotificationChannel()
+
+        // 設定から精度制限を取得して監視
+        serviceScope.launch {
+            database.settingsDao().getSettings().collect { settings ->
+                accuracyLimit = settings?.locationAccuracyLimit ?: 20.0f
+                Log.d("TrackingService", "Accuracy limit updated to: $accuracyLimit")
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -88,6 +104,8 @@ class TrackingService : Service() {
         _currentTrackCount.value = 0
         trackPointCounter = 0
         isStartAddressSaved = false
+        lastThoroughfareKey = null
+        lastAddressProcessTime = 0L
         startTime = System.currentTimeMillis()
 
         // 権限の状態を確認して、フォアグラウンドサービスのタイプを決定する
@@ -142,8 +160,9 @@ class TrackingService : Service() {
     private fun launchLocationMeasurement() {
         locationJob?.cancel()
         locationJob = locationManager.requestLocationUpdates().onEach { location ->
+            val currentTime = System.currentTimeMillis()
             val trackPoint = TrackPoint(
-                time = System.currentTimeMillis(),
+                time = currentTime,
                 latitude = location.latitude,
                 longitude = location.longitude,
                 altitude = location.altitude,
@@ -151,19 +170,43 @@ class TrackingService : Service() {
                 accuracy = location.accuracy
             )
             val insertedId = database.trackPointDao().insertTrackPoint(trackPoint)
-            
-            // 精度が一定以上の最初のTrackPointが得られた時に、住所を保存する
-            if (!isStartAddressSaved && location.accuracy <= ACCURACY_LIMIT) {
-                val sessionId = currentSessionId
-                isStartAddressSaved = true
-                serviceScope.launch {
-                    locationManager.updateCachedLocale(location.latitude, location.longitude)
-                    locationManager.saveAddressRecord(
-                        lat = location.latitude,
-                        lng = location.longitude,
-                        sectionId = sessionId,
-                        trackId = insertedId
-                    )
+            val sessionId = currentSessionId
+
+            // 住所保存のロジック (設定された精度制限を使用)
+            if (location.accuracy <= accuracyLimit) {
+                if (!isStartAddressSaved) {
+                    // 最初の住所保存
+                    isStartAddressSaved = true
+                    lastAddressProcessTime = currentTime
+                    serviceScope.launch {
+                        locationManager.updateCachedLocale(location.latitude, location.longitude)
+                        val address = locationManager.getLocaleAddress(location.latitude, location.longitude)
+                        lastThoroughfareKey = locationManager.getAddressKey(address)
+                        locationManager.saveAddressRecord(
+                            lat = location.latitude,
+                            lng = location.longitude,
+                            sectionId = sessionId,
+                            trackId = insertedId,
+                            timestamp = currentTime
+                        )
+                    }
+                } else if (currentTime - lastAddressProcessTime >= Constants.ADDRESS_PROCESS_INTERVAL_MS) {
+                    // 一定時間経過後の丁目変化チェック (共通メソッドを使用)
+                    serviceScope.launch {
+                        val newKey = locationManager.saveAddressIfThoroughfareChanged(
+                            lat = location.latitude,
+                            lng = location.longitude,
+                            sectionId = sessionId,
+                            trackId = insertedId,
+                            timestamp = currentTime,
+                            lastAddressKey = lastThoroughfareKey
+                        )
+                        if (newKey != null) {
+                            lastThoroughfareKey = newKey
+                        }
+                        // 住所取得を試みた時間を更新（頻度抑制）
+                        lastAddressProcessTime = System.currentTimeMillis()
+                    }
                 }
             }
             
@@ -171,8 +214,8 @@ class TrackingService : Service() {
             _currentTrackCount.value = trackPointCounter
             updateNotification("歩数: ${_currentSteps.value}, 位置情報: ${trackPointCounter}件")
 
-            currentSessionId?.let { sessionId ->
-                val currentSection = database.sectionDao().getSectionById(sessionId)
+            sessionId?.let { id ->
+                val currentSection = database.sectionDao().getSectionById(id)
                 if (currentSection != null && currentSection.trackStartId == null) {
                     database.sectionDao().updateSection(
                         currentSection.copy(trackStartId = insertedId)
@@ -195,8 +238,13 @@ class TrackingService : Service() {
 
         serviceScope.launch {
             val endTime = System.currentTimeMillis()
+            
+            // 最新の精度制限を取得
+            val currentSettings = database.settingsDao().getSettings().first()
+            val limit = currentSettings?.locationAccuracyLimit ?: 20.0f
+
             // 精度が一定以上の最後のTrackPointを取得して住所を保存する
-            val lastAccuratePoint = database.trackPointDao().getLastAccurateTrackPoint(ACCURACY_LIMIT)
+            val lastAccuratePoint = database.trackPointDao().getLastAccurateTrackPoint(limit)
             val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
             
             if (sessionId != null) {
@@ -206,7 +254,8 @@ class TrackingService : Service() {
                         lat = lastAccuratePoint.latitude,
                         lng = lastAccuratePoint.longitude,
                         sectionId = sessionId,
-                        trackId = lastAccuratePoint.id
+                        trackId = lastAccuratePoint.id,
+                        timestamp = lastAccuratePoint.time
                     )
                 }
 
@@ -266,6 +315,5 @@ class TrackingService : Service() {
         const val ACTION_STOP = "ACTION_STOP"
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "tracking_channel"
-        private const val ACCURACY_LIMIT = 20.0f
     }
 }

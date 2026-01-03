@@ -159,11 +159,13 @@ class HomeViewModel(
                     )
                     _uiState.value = _uiState.value.copy(currentAddress = address?.getAddressLine(0))
                     
-                    // 住所をデータベースに保存
+                    // 【修正】住所をデータベースには保存しない（表示のみ）
+                    /*
                     locationManager.saveAddressRecord(
                         lat = location.latitude,
                         lng = location.longitude
                     )
+                    */
                 } else if (location != null) {
                     _uiState.value = _uiState.value.copy(currentAddress = "位置情報の精度が不十分です (${location.accuracy}m)")
                 } else {
