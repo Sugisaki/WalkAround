@@ -14,12 +14,12 @@ import kotlinx.coroutines.launch
 
 /**
  * 地図画面の状態を管理するViewModel。
- * SectionServiceを使用してデータの加工や距離の計算を行います。
+ * SectionProcessorを使用してデータの加工や距離の計算を行います。
  */
 class MapViewModel(
     private val database: AppDatabase,
     private val locationManager: LocationManager,
-    private val sectionService: SectionService
+    private val sectionProcessor: SectionProcessor
 ) : ViewModel() {
 
     private val _track = MutableStateFlow<List<LatLng>>(emptyList())
@@ -50,8 +50,8 @@ class MapViewModel(
             Log.d("MapViewModel", "Section found: $section")
 
             if (section != null) {
-                // SectionService に住所補完、距離計算、平滑化を委譲
-                val preparedTrack = sectionService.prepareSectionAndGetTrack(section)
+                // SectionProcessor に住所補完、距離計算、平滑化を委譲
+                val preparedTrack = sectionProcessor.prepareSectionAndGetTrack(section)
                 
                 if (preparedTrack.size > 1) {
                     val boundsBuilder = LatLngBounds.Builder()

@@ -25,7 +25,7 @@ data class SectionGroup(
  */
 class RouteViewModel(
     private val database: AppDatabase,
-    private val sectionService: SectionService
+    private val sectionProcessor: SectionProcessor
 ) : ViewModel() {
 
     // セクションを主軸としてデータを取得するように変更。
@@ -54,7 +54,7 @@ class RouteViewModel(
      */
     fun updateSectionAddresses(sectionId: Long) {
         viewModelScope.launch {
-            sectionService.updateThoroughfareAddresses(sectionId)
+            sectionProcessor.updateThoroughfareAddresses(sectionId)
         }
     }
 }

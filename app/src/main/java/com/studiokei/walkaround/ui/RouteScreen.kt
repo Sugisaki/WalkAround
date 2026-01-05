@@ -52,8 +52,8 @@ fun RouteScreen(
             initializer {
                 val database = AppDatabase.getDatabase(context)
                 val locationManager = LocationManager(context)
-                val sectionService = SectionService(database, locationManager)
-                RouteViewModel(database, sectionService)
+                val sectionProcessor = SectionProcessor(database, locationManager)
+                RouteViewModel(database, sectionProcessor)
             }
         }
     )

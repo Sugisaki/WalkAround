@@ -12,9 +12,9 @@ import com.studiokei.walkaround.util.applyMedianFilter
 import kotlinx.coroutines.flow.first
 
 /**
- * 走行セクションに関するビジネスロジック（データ加工、距離計算、住所解析など）を提供するサービス。
+ * 走行セクションに関するビジネスロジック（データ加工、距離計算、住所解析など）を処理するプロセッサ。
  */
-class SectionService(
+class SectionProcessor(
     private val database: AppDatabase,
     private val locationManager: LocationManager
 ) {
@@ -57,7 +57,7 @@ class SectionService(
         // 距離の計算と保存 (未保存、または 0.0 の場合のみ)
         if ((section.distanceMeters == null || section.distanceMeters == 0.0) && filteredTrack.size > 1) {
             val distance = calculateDistance(filteredTrack)
-            Log.d("SectionService", "Updating distance for section ${section.sectionId}: $distance m")
+            Log.d("SectionProcessor", "Updating distance for section ${section.sectionId}: $distance m")
             database.sectionDao().updateSection(section.copy(distanceMeters = distance))
         }
 
@@ -76,14 +76,14 @@ class SectionService(
         val endId = section.trackEndId ?: return
 
         // 既存の住所データをクリーンアップ
-        Log.d("SectionService", "Clearing existing address records for section $sectionId before update.")
+        Log.d("SectionProcessor", "Clearing existing address records for section $sectionId before update.")
         database.addressDao().deleteAddressesBySection(sectionId)
 
         // 全トラックデータを取得
         val allPoints = database.trackPointDao().getTrackPointsForSection(startId, endId).first()
         if (allPoints.isEmpty()) return
 
-        Log.d("SectionService", "Starting thoroughfare analysis for section $sectionId. Total points: ${allPoints.size}")
+        Log.d("SectionProcessor", "Starting thoroughfare analysis for section $sectionId. Total points: ${allPoints.size}")
 
         var lastProcessedTime = 0L
         var lastAddressKey: String? = null
@@ -129,7 +129,7 @@ class SectionService(
         // 3. 最後の地点 (trackEndId) の住所を明示的に保存
         val lastPoint = allPoints.last()
         if (lastSavedTrackId != lastPoint.id) {
-            Log.d("SectionService", "Saving final address for section $sectionId at point ${lastPoint.id}.")
+            Log.d("SectionProcessor", "Saving final address for section $sectionId at point ${lastPoint.id}.")
             locationManager.saveAddressRecord(
                 lat = lastPoint.latitude,
                 lng = lastPoint.longitude,
@@ -139,7 +139,7 @@ class SectionService(
             )
         }
 
-        Log.d("SectionService", "Thoroughfare analysis completed for section $sectionId")
+        Log.d("SectionProcessor", "Thoroughfare analysis completed for section $sectionId")
     }
 
     /**
@@ -152,7 +152,7 @@ class SectionService(
         val firstPoint = accuratePoints.first()
         val firstAddress = database.addressDao().getAddressBySectionAndTrack(section.sectionId, firstPoint.id)
         if (firstAddress == null) {
-            Log.d("SectionService", "Fetching start address for section ${section.sectionId}")
+            Log.d("SectionProcessor", "Fetching start address for section ${section.sectionId}")
             locationManager.saveAddressRecord(
                 lat = firstPoint.latitude,
                 lng = firstPoint.longitude,
@@ -167,7 +167,7 @@ class SectionService(
             val lastPoint = accuratePoints.last()
             val lastAddress = database.addressDao().getAddressBySectionAndTrack(section.sectionId, lastPoint.id)
             if (lastAddress == null) {
-                Log.d("SectionService", "Fetching end address for section ${section.sectionId}")
+                Log.d("SectionProcessor", "Fetching end address for section ${section.sectionId}")
                 locationManager.saveAddressRecord(
                     lat = lastPoint.latitude,
                     lng = lastPoint.longitude,
