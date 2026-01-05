@@ -7,13 +7,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,9 +31,19 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/**
+ * 経路履歴画面。
+ * セクションごとにグループ化された住所録を表示します。
+ * 
+ * @param scrollToSectionId このIDが指定されている場合、そのセクションまで自動スクロールします。
+ * @param onScrollFinished スクロール完了時に呼び出されるコールバック。
+ * @param onSectionClick セクションがクリックされた際（地図表示など）の処理。
+ */
 @Composable
 fun RouteScreen(
     modifier: Modifier = Modifier,
+    scrollToSectionId: Long? = null,
+    onScrollFinished: () -> Unit = {},
     onSectionClick: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -40,16 +52,32 @@ fun RouteScreen(
             initializer {
                 val database = AppDatabase.getDatabase(context)
                 val locationManager = LocationManager(context)
-                // SectionManager から SectionService への改名に対応
                 val sectionService = SectionService(database, locationManager)
                 RouteViewModel(database, sectionService)
             }
         }
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    
+    // リストの状態を保持し、スクロール操作を可能にする
+    val listState = rememberLazyListState()
 
     val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss")
         .withZone(ZoneId.systemDefault())
+
+    // scrollToSectionId が指定された場合に、該当アイテムまでスクロールする処理
+    LaunchedEffect(scrollToSectionId, uiState.groupedAddresses) {
+        if (scrollToSectionId != null && uiState.groupedAddresses.isNotEmpty()) {
+            // 指定されたセクションIDを持つアイテムのインデックスを検索
+            val index = uiState.groupedAddresses.indexOfFirst { it.sectionId == scrollToSectionId }
+            if (index != -1) {
+                // 該当アイテムまで即座にスクロール
+                listState.scrollToItem(index)
+                // スクロール完了を通知してIDをリセットさせる
+                onScrollFinished()
+            }
+        }
+    }
 
     Scaffold(modifier = modifier) { innerPadding ->
         LazyColumn(
@@ -57,9 +85,10 @@ fun RouteScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp),
+            state = listState, // 状態を紐付け
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(uiState.groupedAddresses) { group ->
+            itemsIndexed(uiState.groupedAddresses) { _, group ->
                 SectionBlock(
                     group = group,
                     formatter = dateTimeFormatter,
@@ -111,8 +140,6 @@ fun SectionBlock(
                 }
             }
 
-            // 住所リストをループして表示。
-            // ViewModel側で降順（新しい順）に並んでいるため、最初の要素(index=0)が最新地点となる。
             group.addresses.forEachIndexed { index, record ->
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -121,11 +148,8 @@ fun SectionBlock(
                         color = MaterialTheme.colorScheme.secondary
                     )
                     
-                    // 最新の到達地点には🔴、それ以外の通過地点には⬆️を表示。
+                    // 最新の地点には🔴、それ以外には⬆️を表示。
                     val icon = if (index == 0) "🔴 " else "⬆️ "
-                    
-                    // 最新の地点(index=0)は詳細な住所(addressDisplay)を、
-                    // それ以外の経過地点は簡略化された住所(cityDisplay)を表示する。
                     val addressText = if (index == 0) {
                         record.addressDisplay() ?: record.name ?: "不明な住所"
                     } else {

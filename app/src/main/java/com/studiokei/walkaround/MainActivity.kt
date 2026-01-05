@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun WalkaroundApp() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
-    // 選択されたセクションIDを保持
+    // 選択されたセクションIDを保持（スクロール制御に使用）
     var selectedSectionId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     NavigationSuiteScaffold(
@@ -70,13 +70,20 @@ fun WalkaroundApp() {
                 AppDestinations.HOME -> HomeScreen(
                     modifier = Modifier.padding(innerPadding),
                     onSectionClick = { sectionId ->
+                        // Home画面でセクションがタップされたら、Route画面へ遷移しスクロール対象として保持
                         selectedSectionId = sectionId
-                        currentDestination = AppDestinations.MAP
+                        currentDestination = AppDestinations.ROUTE
                     }
                 )
                 AppDestinations.ROUTE -> RouteScreen(
                     modifier = Modifier.padding(innerPadding),
+                    scrollToSectionId = selectedSectionId,
+                    onScrollFinished = {
+                        // スクロールが完了したらIDをクリアして、意図しない再スクロールを防ぐ
+                        selectedSectionId = null
+                    },
                     onSectionClick = { sectionId ->
+                        // Route画面内でセクションがタップされたら、従来通りMap画面へ遷移
                         selectedSectionId = sectionId
                         currentDestination = AppDestinations.MAP
                     }

@@ -21,27 +21,25 @@ data class SectionGroup(
 
 /**
  * 経路履歴画面の状態を管理するViewModel。
- * 保存された住所データをセクションごとにグループ化して提供します。
+ * 全ての走行セクションと、それに紐づく住所データを一括で管理します。
  */
 class RouteViewModel(
     private val database: AppDatabase,
     private val sectionService: SectionService
 ) : ViewModel() {
 
-    val uiState: StateFlow<RouteUiState> = database.addressDao().getAllAddressRecords()
-        .map { records ->
-            // 住所レコードをセクションIDごとにグループ化し、有効なセクションのみを抽出する
-            val grouped = records.groupBy { it.sectionId }
-                // sectionId が null のもの（どの走行セクションにも属さない住所）を除外
-                .filterKeys { it != null }
-                .entries
-                // sectionId の降順（新しい走行セクション順）で並べ替える
-                .sortedByDescending { it.key }
-                .map { (sectionId, addresses) ->
-                    // 各グループ内の住所も、記録時刻の降順（新しい順）に並べ替えて保持
-                    SectionGroup(sectionId, addresses.sortedByDescending { it.time })
-                }
-            RouteUiState(grouped)
+    // セクションを主軸としてデータを取得するように変更。
+    // これにより、住所データがまだ記録されていない古いセクションも表示対象に含まれます。
+    val uiState: StateFlow<RouteUiState> = database.sectionDao().getSectionsWithAddresses()
+        .map { sectionsWithAddresses ->
+            val groups = sectionsWithAddresses.map { item ->
+                SectionGroup(
+                    sectionId = item.section.sectionId,
+                    // 各セクション内の住所を時間順（新しい順）に並べ替える
+                    addresses = item.addresses.sortedByDescending { it.time }
+                )
+            }
+            RouteUiState(groups)
         }
         .stateIn(
             scope = viewModelScope,

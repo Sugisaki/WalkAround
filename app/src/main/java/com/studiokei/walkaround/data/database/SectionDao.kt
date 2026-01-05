@@ -2,20 +2,34 @@ package com.studiokei.walkaround.data.database
 
 import androidx.room.Dao
 import androidx.room.Delete
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Relation
 import androidx.room.Transaction
 import androidx.room.Update
+import com.studiokei.walkaround.data.model.AddressRecord
 import com.studiokei.walkaround.data.model.Section
 import com.studiokei.walkaround.data.model.SectionSummary
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * セクションとそのセクションに紐づく全ての住所レコードを保持するデータ構造。
+ * Route画面での一覧表示に使用します。
+ */
+data class SectionWithAddresses(
+    @Embedded val section: Section,
+    @Relation(
+        parentColumn = "sectionId",
+        entityColumn = "sectionId"
+    )
+    val addresses: List<AddressRecord>
+)
+
 @Dao
 interface SectionDao {
     /**
-     * 全ての走行セクションの概要を取得します。
-     * 住所情報の取得は SectionSummary クラスの @Relation アノテーションにより Room が自動で行います。
-     * @Relation を含むクエリを安全に実行するため、@Transaction を付与しています。
+     * 全ての走行セクションの概要を取得します（Home画面用）。
      */
     @Transaction
     @Query("""
@@ -32,6 +46,14 @@ interface SectionDao {
         ORDER BY s.createdAtTimestamp DESC
     """)
     fun getSectionSummaries(): Flow<List<SectionSummary>>
+
+    /**
+     * 全ての走行セクションと、それぞれに紐づく住所レコードを取得します（Route画面用）。
+     * 住所がないセクションも取得対象に含まれます。
+     */
+    @Transaction
+    @Query("SELECT * FROM sections ORDER BY createdAtTimestamp DESC")
+    fun getSectionsWithAddresses(): Flow<List<SectionWithAddresses>>
 
     @Query("SELECT * FROM sections WHERE sectionId = :sectionId")
     suspend fun getSectionById(sectionId: Long): Section?
