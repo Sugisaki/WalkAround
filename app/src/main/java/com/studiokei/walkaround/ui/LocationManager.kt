@@ -247,54 +247,30 @@ class LocationManager(private val context: Context) {
     ) {
         withContext(Dispatchers.IO) {
             val time = timestamp ?: System.currentTimeMillis()
-            var addressLine: String? = null
-            var adminArea: String? = null
-            var name: String? = null
-            var countryName: String? = null
-            var locality: String? = null
-            var subLocality: String? = null
-            var thoroughfare: String? = null
-            var subThoroughfare: String? = null
-            var postalCode: String? = null
-
             if (lat != null && lng != null) {
                 val address = getLocaleAddress(lat, lng)
-                addressLine = address?.getAddressLine(0)
-                adminArea = address?.adminArea
-                countryName = address?.countryName
-                locality = address?.locality
-                subLocality = address?.subLocality
-                thoroughfare = address?.thoroughfare
-                subThoroughfare = address?.subThoroughfare
-                postalCode = address?.postalCode
-                
-                // featureName が数字と記号だけの場合は name を null にする
-                val fName = address?.featureName
-                name = if (fName != null && fName.any { it.isLetter() }) {
-                    fName
-                } else {
-                    null
-                }
+                val record = AddressRecord(
+                    time = time,
+                    sectionId = sectionId,
+                    trackId = trackId,
+                    lat = lat,
+                    lng = lng,
+                    address = address
+                )
+                database.addressDao().insert(record)
+                Log.d("LocationManager", "AddressRecord saved: $record")
+            } else {
+                val record = AddressRecord(
+                    time = time,
+                    sectionId = sectionId,
+                    trackId = trackId,
+                    lat = lat,
+                    lng = lng,
+                    address = null
+                )
+                database.addressDao().insert(record)
+                Log.d("LocationManager", "AddressRecord saved (null location): $record")
             }
-
-            val record = AddressRecord(
-                time = time,
-                sectionId = sectionId,
-                trackId = trackId,
-                lat = lat,
-                lng = lng,
-                name = name,
-                addressLine = addressLine,
-                adminArea = adminArea,
-                countryName = countryName,
-                locality = locality,
-                subLocality = subLocality,
-                thoroughfare = thoroughfare,
-                subThoroughfare = subThoroughfare,
-                postalCode = postalCode
-            )
-            database.addressDao().insert(record)
-            Log.d("LocationManager", "AddressRecord saved: $record")
         }
     }
 }

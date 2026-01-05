@@ -34,11 +34,12 @@ fun MapScreen(
                 val application = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]!!
                 val database = AppDatabase.getDatabase(application)
                 val locationManager = LocationManager(application)
-                val sectionManager = SectionManager(database, locationManager)
+                // SectionManager から SectionService への改名に対応
+                val sectionService = SectionService(database, locationManager)
                 MapViewModel(
                     database,
                     locationManager,
-                    sectionManager
+                    sectionService
                 )
             }
         }

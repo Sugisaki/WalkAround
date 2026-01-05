@@ -12,10 +12,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * 地図画面の状態を管理するViewModel。
+ * SectionServiceを使用してデータの加工や距離の計算を行います。
+ */
 class MapViewModel(
     private val database: AppDatabase,
     private val locationManager: LocationManager,
-    private val sectionManager: SectionManager
+    private val sectionService: SectionService
 ) : ViewModel() {
 
     private val _track = MutableStateFlow<List<LatLng>>(emptyList())
@@ -27,6 +31,11 @@ class MapViewModel(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    /**
+     * 指定されたセクションのデータをロードし、軌跡を表示可能な状態にします。
+     * 
+     * @param sectionId ロード対象のセクションID。nullの場合は最新のセクションを表示します。
+     */
     fun loadSection(sectionId: Long?) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -41,8 +50,8 @@ class MapViewModel(
             Log.d("MapViewModel", "Section found: $section")
 
             if (section != null) {
-                // SectionManager に住所補完、距離計算、平滑化を委譲
-                val preparedTrack = sectionManager.prepareSectionAndGetTrack(section)
+                // SectionService に住所補完、距離計算、平滑化を委譲
+                val preparedTrack = sectionService.prepareSectionAndGetTrack(section)
                 
                 if (preparedTrack.size > 1) {
                     val boundsBuilder = LatLngBounds.Builder()
@@ -59,6 +68,9 @@ class MapViewModel(
         }
     }
 
+    /**
+     * 軌跡データがない場合に、現在地またはデフォルト位置を表示します。
+     */
     private fun loadFallbackLocation() {
         viewModelScope.launch {
             try {

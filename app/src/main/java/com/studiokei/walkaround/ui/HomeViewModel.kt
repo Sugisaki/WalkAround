@@ -8,6 +8,7 @@ import android.os.IBinder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.studiokei.walkaround.data.database.AppDatabase
+import com.studiokei.walkaround.data.model.AddressRecord
 import com.studiokei.walkaround.data.model.SectionSummary
 import com.studiokei.walkaround.service.TrackingService
 import com.studiokei.walkaround.ui.StepSensorManager.SensorMode
@@ -142,7 +143,14 @@ class HomeViewModel(
                         lastTrackPoint.latitude,
                         lastTrackPoint.longitude
                     )
-                    _uiState.value = _uiState.value.copy(currentAddress = address?.getAddressLine(0))
+                    if (address != null) {
+                        val tempRecord = AddressRecord(
+                            address = address
+                        )
+                        _uiState.value = _uiState.value.copy(currentAddress = tempRecord.addressDisplay())
+                    } else {
+                        _uiState.value = _uiState.value.copy(currentAddress = "住所を取得できませんでした")
+                    }
                 } else {
                     _uiState.value = _uiState.value.copy(currentAddress = "精度の高い位置情報がまだ記録されていません")
                 }
@@ -157,7 +165,14 @@ class HomeViewModel(
                         location.latitude,
                         location.longitude
                     )
-                    _uiState.value = _uiState.value.copy(currentAddress = address?.getAddressLine(0))
+                    if (address != null) {
+                        val tempRecord = AddressRecord(
+                            address = address
+                        )
+                        _uiState.value = _uiState.value.copy(currentAddress = tempRecord.addressDisplay())
+                    } else {
+                        _uiState.value = _uiState.value.copy(currentAddress = "住所を取得できませんでした")
+                    }
                     
                     // 【修正】住所をデータベースには保存しない（表示のみ）
                     /*

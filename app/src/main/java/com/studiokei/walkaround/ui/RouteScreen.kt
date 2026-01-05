@@ -40,8 +40,9 @@ fun RouteScreen(
             initializer {
                 val database = AppDatabase.getDatabase(context)
                 val locationManager = LocationManager(context)
-                val sectionManager = SectionManager(database, locationManager)
-                RouteViewModel(database, sectionManager)
+                // SectionManager から SectionService への改名に対応
+                val sectionService = SectionService(database, locationManager)
+                RouteViewModel(database, sectionService)
             }
         }
     )
@@ -110,16 +111,29 @@ fun SectionBlock(
                 }
             }
 
-            group.addresses.forEach { record ->
+            // 住所リストをループして表示。
+            // ViewModel側で降順（新しい順）に並んでいるため、最初の要素(index=0)が最新地点となる。
+            group.addresses.forEachIndexed { index, record ->
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = formatter.format(Instant.ofEpochMilli(record.time)),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary
                     )
-                    // cityDisplay() を使用して、市町村以下の住所を表示
+                    
+                    // 最新の到達地点には🔴、それ以外の通過地点には⬆️を表示。
+                    val icon = if (index == 0) "🔴 " else "⬆️ "
+                    
+                    // 最新の地点(index=0)は詳細な住所(addressDisplay)を、
+                    // それ以外の経過地点は簡略化された住所(cityDisplay)を表示する。
+                    val addressText = if (index == 0) {
+                        record.addressDisplay() ?: record.name ?: "不明な住所"
+                    } else {
+                        record.cityDisplay() ?: record.name ?: "不明な住所"
+                    }
+                    
                     Text(
-                        text = record.cityDisplay() ?: record.name ?: "不明な住所",
+                        text = "$icon$addressText",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

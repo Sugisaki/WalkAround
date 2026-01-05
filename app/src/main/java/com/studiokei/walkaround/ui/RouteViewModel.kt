@@ -19,20 +19,26 @@ data class SectionGroup(
     val addresses: List<AddressRecord>
 )
 
+/**
+ * 経路履歴画面の状態を管理するViewModel。
+ * 保存された住所データをセクションごとにグループ化して提供します。
+ */
 class RouteViewModel(
     private val database: AppDatabase,
-    private val sectionManager: SectionManager
+    private val sectionService: SectionService
 ) : ViewModel() {
 
     val uiState: StateFlow<RouteUiState> = database.addressDao().getAllAddressRecords()
         .map { records ->
-            // sectionId ごとにグループ化し、sectionId の降順（新しい順）で並べ替える
-            // sectionId が null のものは最後に配置
+            // 住所レコードをセクションIDごとにグループ化し、有効なセクションのみを抽出する
             val grouped = records.groupBy { it.sectionId }
+                // sectionId が null のもの（どの走行セクションにも属さない住所）を除外
+                .filterKeys { it != null }
                 .entries
-                .sortedWith(compareByDescending<Map.Entry<Long?, List<AddressRecord>>> { it.key }.thenBy { 0 })
+                // sectionId の降順（新しい走行セクション順）で並べ替える
+                .sortedByDescending { it.key }
                 .map { (sectionId, addresses) ->
-                    // 各グループ内の住所も時間順（新しい順）に並んでいることを確認
+                    // 各グループ内の住所も、記録時刻の降順（新しい順）に並べ替えて保持
                     SectionGroup(sectionId, addresses.sortedByDescending { it.time })
                 }
             RouteUiState(grouped)
@@ -43,9 +49,14 @@ class RouteViewModel(
             initialValue = RouteUiState()
         )
 
+    /**
+     * 指定されたセクションの住所情報を解析し、丁目の変化点などを再生成します。
+     * 
+     * @param sectionId 対象のセクションID
+     */
     fun updateSectionAddresses(sectionId: Long) {
         viewModelScope.launch {
-            sectionManager.updateThoroughfareAddresses(sectionId)
+            sectionService.updateThoroughfareAddresses(sectionId)
         }
     }
 }
