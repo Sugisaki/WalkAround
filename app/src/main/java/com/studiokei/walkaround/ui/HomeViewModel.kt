@@ -23,12 +23,17 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
 
+/**
+ * ホーム画面のUI状態を保持するデータクラス。
+ */
 data class HomeUiState(
     val isRunning: Boolean = false,
     val currentStepCount: Int = 0,
     val currentTrackPointCount: Int = 0,
     val todayStepCount: Int = 0,
     val currentAddress: String? = null,
+    val currentFeatureName: String? = null, // 地点名称（建物名など）を個別に保持
+    val showAddressDialog: Boolean = false,
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
     val hasHealthConnectPermissions: Boolean = false,
     val sections: List<SectionSummary> = emptyList(),
@@ -105,7 +110,7 @@ class HomeViewModel(
             service.isRunning.onEach { running ->
                 _uiState.update { it.copy(isRunning = running) }
                 if (!running) {
-                    _uiState.update { it.copy(currentAddress = null) }
+                    _uiState.update { it.copy(currentAddress = null, currentFeatureName = null) }
                 }
             }.launchIn(viewModelScope)
 
@@ -134,10 +139,15 @@ class HomeViewModel(
     }
 
     /**
-     * 現在地の住所を取得して表示用に更新します。
+     * 現在地の住所を取得して表示用に更新し、ダイアログを表示します。
+     * 住所と地点名称を個別に取得してUI状態にセットします。
      */
     fun fetchCurrentAddress() {
-        _uiState.update { it.copy(currentAddress = "取得中...") }
+        _uiState.update { it.copy(
+            currentAddress = "取得中...", 
+            currentFeatureName = null,
+            showAddressDialog = true 
+        ) }
 
         viewModelScope.launch {
             val settings = database.settingsDao().getSettings().first()
@@ -153,12 +163,7 @@ class HomeViewModel(
                         lastTrackPoint.latitude,
                         lastTrackPoint.longitude
                     )
-                    if (address != null) {
-                        val tempRecord = AddressRecord(address = address)
-                        _uiState.update { it.copy(currentAddress = tempRecord.addressDisplay()) }
-                    } else {
-                        _uiState.update { it.copy(currentAddress = "住所を取得できませんでした") }
-                    }
+                    updateAddressState(address)
                 } else {
                     _uiState.update { it.copy(currentAddress = "精度の高い位置情報がまだ記録されていません") }
                 }
@@ -173,12 +178,7 @@ class HomeViewModel(
                         location.latitude,
                         location.longitude
                     )
-                    if (address != null) {
-                        val tempRecord = AddressRecord(address = address)
-                        _uiState.update { it.copy(currentAddress = tempRecord.addressDisplay()) }
-                    } else {
-                        _uiState.update { it.copy(currentAddress = "住所を取得できませんでした") }
-                    }
+                    updateAddressState(address)
                 } else if (location != null) {
                     _uiState.update { it.copy(currentAddress = "位置情報の精度が不十分です (${location.accuracy}m)") }
                 } else {
@@ -186,6 +186,34 @@ class HomeViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * 取得したAddressオブジェクトからUI状態を更新します。
+     */
+    private fun updateAddressState(address: android.location.Address?) {
+        if (address != null) {
+            val tempRecord = AddressRecord(address = address)
+            val baseAddress = tempRecord.addressDisplay()
+            
+            // 名称（name）が住所本体の末尾と一致する場合は、個別表示の名称を null にする
+            val featureName = if (tempRecord.name != null && baseAddress != null && !baseAddress.endsWith(tempRecord.name!!)) {
+                tempRecord.name
+            } else {
+                null
+            }
+
+            _uiState.update { it.copy(
+                currentAddress = baseAddress,
+                currentFeatureName = featureName
+            ) }
+        } else {
+            _uiState.update { it.copy(currentAddress = "住所を取得できませんでした") }
+        }
+    }
+
+    fun dismissAddressDialog() {
+        _uiState.update { it.copy(showAddressDialog = false) }
     }
 
     fun onPermissionsResult(granted: Boolean) {

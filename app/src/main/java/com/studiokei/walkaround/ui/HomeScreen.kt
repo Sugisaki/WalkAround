@@ -16,12 +16,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +43,10 @@ import com.studiokei.walkaround.ui.StepSensorManager.SensorMode
 import com.studiokei.walkaround.util.DateTimeFormatUtils
 import java.time.Instant
 
+/**
+ * ホーム画面。
+ * 歩数や位置情報の現在の状態、および過去の走行セクション一覧を表示します。
+ */
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
@@ -79,7 +85,6 @@ fun HomeScreen(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         homeViewModel.onPermissionsResult(isGranted)
-        
         if (isGranted) {
             // 身体活動の許可が得られたら開始（ヘルスコネクトは不要）
             homeViewModel.startTracking()
@@ -164,6 +169,38 @@ fun HomeScreen(
         }
     }
 
+    // 住所表示用ダイアログの修正
+    if (uiState.showAddressDialog) {
+        AlertDialog(
+            onDismissRequest = { homeViewModel.dismissAddressDialog() },
+            title = { Text("現在地の住所") },
+            text = { 
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // 1行目: 住所 (標準的なサイズ)
+                    Text(
+                        text = uiState.currentAddress ?: "住所を取得中...",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    
+                    // 2行目: 地点名称 (少し大きいサイズ・太字)
+                    if (!uiState.currentFeatureName.isNullOrBlank()) {
+                        Text(
+                            text = uiState.currentFeatureName!!,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { homeViewModel.dismissAddressDialog() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
     Scaffold(modifier = modifier) { innerPadding ->
         Column(
             modifier = Modifier
@@ -213,18 +250,9 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 住所表示ボタン（常時表示）
+            // 住所表示ボタン
             Button(onClick = { handleFetchAddressClick() }) {
                 Text("住所を表示")
-            }
-
-            uiState.currentAddress?.let { address ->
-                Text(
-                    text = address,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp),
-                    textAlign = TextAlign.Center
-                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))

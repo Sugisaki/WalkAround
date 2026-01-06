@@ -108,12 +108,13 @@ data class AddressRecord(
     }
 
     /**
-     * 住所の文字列（addressLine）から国名（countryName）とその直後の区切り文字を削除し、
-     * 都道府県以下の住所を返す。
+     * 都道府県以下の住所（名称なし）を返します。
+     * 地点名（name）が住所文字列（addressLine）の末尾に含まれている場合は、分離のために除去します。
      */
     fun addressDisplay(): String? {
         if (addressLine == null) return null
         
+        // 国名を除去
         var display = if (countryName != null) {
             val index = addressLine.indexOf(countryName)
             if (index != -1) {
@@ -124,7 +125,28 @@ data class AddressRecord(
         } else {
             addressLine
         }
+
+        // 地点名（name）が住所の末尾に含まれている場合は、それを取り除く
+        // これにより「住所」と「地点名」を確実に別々の行で表示できるようにする
+        if (!name.isNullOrBlank() && display.endsWith(name)) {
+            display = display.removeSuffix(name).trim().removeSuffix("、").removeSuffix(",").trim()
+        }
         
         return display
+    }
+
+    /**
+     * 名称（建物名など）を含めた住所表示を返します。
+     * 名称が数字・記号のみの場合はフィルタリングされ、住所本体と重複する場合は付加しません。
+     */
+    fun addressDisplayWithFeature(): String? {
+        val baseAddress = addressDisplay() ?: return null
+        
+        // 有効な名称（name）があり、かつベースの住所（既にnameを除去済み）に含まれていない場合のみ付加
+        return if (!name.isNullOrBlank() && !baseAddress.contains(name)) {
+            "$baseAddress\n$name"
+        } else {
+            baseAddress
+        }
     }
 }
