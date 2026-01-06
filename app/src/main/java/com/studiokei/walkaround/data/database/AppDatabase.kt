@@ -34,10 +34,34 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        // バージョン9から10への手動Migration
+        /**
+         * バージョン9から10への手動Migration。
+         * locationAccuracyLimit カラムを追加しますが、重複エラーを避けるために
+         * すでに存在するかどうかを確認してから実行します。
+         */
         private val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE app_settings ADD COLUMN locationAccuracyLimit REAL NOT NULL DEFAULT 20.0")
+                // PRAGMA table_info を使用して既存のカラム名を確認
+                val cursor = db.query("PRAGMA table_info(app_settings)")
+                var columnExists = false
+                try {
+                    val nameColumnIndex = cursor.getColumnIndex("name")
+                    if (nameColumnIndex != -1) {
+                        while (cursor.moveToNext()) {
+                            if (cursor.getString(nameColumnIndex) == "locationAccuracyLimit") {
+                                columnExists = true
+                                break
+                            }
+                        }
+                    }
+                } finally {
+                    cursor.close()
+                }
+
+                // カラムが存在しない場合のみ追加を実行
+                if (!columnExists) {
+                    db.execSQL("ALTER TABLE app_settings ADD COLUMN locationAccuracyLimit REAL NOT NULL DEFAULT 20.0")
+                }
             }
         }
 
