@@ -2,14 +2,17 @@ package com.studiokei.walkaround.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -27,9 +30,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.studiokei.walkaround.data.database.AppDatabase
+import com.studiokei.walkaround.util.DateTimeFormatUtils
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
  * 経路履歴画面。
@@ -62,9 +64,6 @@ fun RouteScreen(
     // リストの状態を保持し、スクロール操作を可能にする
     val listState = rememberLazyListState()
 
-    val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss")
-        .withZone(ZoneId.systemDefault())
-
     // scrollToSectionId が指定された場合に、該当アイテムまでスクロールする処理
     LaunchedEffect(scrollToSectionId, uiState.groupedAddresses) {
         if (scrollToSectionId != null && uiState.groupedAddresses.isNotEmpty()) {
@@ -91,7 +90,7 @@ fun RouteScreen(
             itemsIndexed(uiState.groupedAddresses) { _, group ->
                 SectionBlock(
                     group = group,
-                    formatter = dateTimeFormatter,
+                    displayUnit = uiState.displayUnit,
                     onUpdateClick = { group.sectionId?.let { viewModel.updateSectionAddresses(it) } },
                     onClick = { group.sectionId?.let { onSectionClick(it) } }
                 )
@@ -103,7 +102,7 @@ fun RouteScreen(
 @Composable
 fun SectionBlock(
     group: SectionGroup,
-    formatter: DateTimeFormatter,
+    displayUnit: String,
     onUpdateClick: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -116,34 +115,92 @@ fun SectionBlock(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // 1行目：日付とセクションID
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val sectionTitle = if (group.sectionId != null) {
-                    "セクション ${group.sectionId}"
-                } else {
-                    "セクション外"
-                }
-                
+                // 左側：日付表示（共通のフォーマッタを使用）
+                val dateText = group.createdAtTimestamp?.let {
+                    DateTimeFormatUtils.headerDateFormatter.format(Instant.ofEpochMilli(it))
+                } ?: "日付不明"
+
                 Text(
-                    text = sectionTitle,
+                    text = dateText,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
 
-                if (group.sectionId != null) {
-                    OutlinedButton(onClick = onUpdateClick) {
-                        Text("更新")
+                // 右側：セクションIDと更新ボタン
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (group.sectionId != null) {
+                        // セクションIDを小さく表示
+                        Text(
+                            text = "Sec: ${group.sectionId}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        // 更新ボタンを少しコンパクトに
+                        OutlinedButton(
+                            onClick = onUpdateClick,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text(
+                                "更新",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
                     }
                 }
             }
 
+            // 2行目：距離と歩数
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 左側：距離
+                val distanceDisplay = group.distanceMeters?.let { meters ->
+                    if (displayUnit == "mile") {
+                        val miles = meters / 1609.34
+                        "距離: %.2f mile".format(miles)
+                    } else {
+                        "距離: %.2f km".format(meters / 1000.0)
+                    }
+                } ?: "距離: ---"
+
+                Text(
+                    text = distanceDisplay,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // 右側：歩数
+                Text(
+                    text = "歩数: ${group.steps}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // 境界線を追加（細く薄い線）
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+
+            // 住所リスト
             group.addresses.forEachIndexed { index, record ->
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = formatter.format(Instant.ofEpochMilli(record.time)),
+                        text = DateTimeFormatUtils.dateTimeFormatter.format(Instant.ofEpochMilli(record.time)),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary
                     )

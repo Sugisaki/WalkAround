@@ -38,9 +38,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.ui.StepSensorManager.SensorMode
+import com.studiokei.walkaround.util.DateTimeFormatUtils
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Composable
 fun HomeScreen(
@@ -62,9 +61,6 @@ fun HomeScreen(
         }
     )
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
-
-    val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")
-        .withZone(ZoneId.systemDefault())
 
     // --- 権限リクエスト用ランチャー ---
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -272,8 +268,9 @@ fun HomeScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        // 日付表示を Route 画面と共通のフォーマットに変更
                                         Text(
-                                            text = dateTimeFormatter.format(Instant.ofEpochMilli(summary.startTimeMillis)),
+                                            text = DateTimeFormatUtils.headerDateFormatter.format(Instant.ofEpochMilli(summary.startTimeMillis)),
                                             style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -322,14 +319,13 @@ fun HomeScreen(
                                             val meters = summary.distanceMeters
                                             val distanceDisplay = if (uiState.displayUnit == "mile") {
                                                 val miles = meters / 1609.34
-                                                "%.2f mile".format(miles)
+                                                "距離: %.2f mile".format(miles)
                                             } else {
-                                                "%.2f km".format(meters / 1000.0)
+                                                "距離: %.2f km".format(meters / 1000.0)
                                             }
-                                            Text(text = "距離: $distanceDisplay", style = MaterialTheme.typography.bodyMedium)
+                                            Text(text = distanceDisplay, style = MaterialTheme.typography.bodyMedium)
                                         } else {
-                                            // 距離がない場合も位置を保つための空のSpacer
-                                            Spacer(modifier = Modifier.weight(1f))
+                                            Text(text = "距離: ---", style = MaterialTheme.typography.bodyMedium)
                                         }
                                         // 歩数を右側に表示
                                         Text(

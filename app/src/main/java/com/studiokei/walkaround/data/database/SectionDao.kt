@@ -11,10 +11,11 @@ import androidx.room.Update
 import com.studiokei.walkaround.data.model.AddressRecord
 import com.studiokei.walkaround.data.model.Section
 import com.studiokei.walkaround.data.model.SectionSummary
+import com.studiokei.walkaround.data.model.StepSegment
 import kotlinx.coroutines.flow.Flow
 
 /**
- * セクションとそのセクションに紐づく全ての住所レコードを保持するデータ構造。
+ * セクションとそのセクションに紐づく全ての住所レコード、および歩数データを保持するデータ構造。
  * Route画面での一覧表示に使用します。
  */
 data class SectionWithAddresses(
@@ -23,7 +24,14 @@ data class SectionWithAddresses(
         parentColumn = "sectionId",
         entityColumn = "sectionId"
     )
-    val addresses: List<AddressRecord>
+    val addresses: List<AddressRecord>,
+    
+    // セクションに紐づく歩数データを取得
+    @Relation(
+        parentColumn = "sectionId",
+        entityColumn = "sectionId"
+    )
+    val stepSegments: List<StepSegment>
 )
 
 @Dao
