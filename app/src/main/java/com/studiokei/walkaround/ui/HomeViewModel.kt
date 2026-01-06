@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
@@ -34,6 +35,9 @@ data class HomeUiState(
     val displayUnit: String = "km"
 )
 
+/**
+ * ホーム画面の状態を管理するViewModel。
+ */
 class HomeViewModel(
     private val context: Context,
     private val database: AppDatabase,
@@ -71,42 +75,46 @@ class HomeViewModel(
         viewModelScope.launch {
             // セクション一覧の監視
             database.sectionDao().getSectionSummaries().onEach { summaries ->
-                _uiState.value = _uiState.value.copy(sections = summaries)
+                _uiState.update { it.copy(sections = summaries) }
             }.launchIn(viewModelScope)
 
             // 本日の歩数の監視
             val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
             database.sectionDao().getTodayTotalSteps(startOfDay).onEach { count ->
-                _uiState.value = _uiState.value.copy(todayStepCount = count ?: 0)
+                _uiState.update { it.copy(todayStepCount = count ?: 0) }
             }.launchIn(viewModelScope)
 
             // 設定の監視（単位など）
             database.settingsDao().getSettings().onEach { settings ->
-                _uiState.value = _uiState.value.copy(displayUnit = settings?.displayUnit ?: "km")
+                _uiState.update { it.copy(displayUnit = settings?.displayUnit ?: "km") }
             }.launchIn(viewModelScope)
 
-            _uiState.value = _uiState.value.copy(
-                sensorMode = stepSensorManager.sensorMode,
-                hasHealthConnectPermissions = healthConnectManager.hasPermissions()
-            )
+            // センサーモードとヘルスコネクト権限の初期確認
+            val hasPermissions = healthConnectManager.hasPermissions()
+            _uiState.update { 
+                it.copy(
+                    sensorMode = stepSensorManager.sensorMode,
+                    hasHealthConnectPermissions = hasPermissions
+                )
+            }
         }
     }
 
     private fun observeService() {
         trackingService?.let { service ->
             service.isRunning.onEach { running ->
-                _uiState.value = _uiState.value.copy(isRunning = running)
+                _uiState.update { it.copy(isRunning = running) }
                 if (!running) {
-                    _uiState.value = _uiState.value.copy(currentAddress = null)
+                    _uiState.update { it.copy(currentAddress = null) }
                 }
             }.launchIn(viewModelScope)
 
             service.currentSteps.onEach { steps ->
-                _uiState.value = _uiState.value.copy(currentStepCount = steps)
+                _uiState.update { it.copy(currentStepCount = steps) }
             }.launchIn(viewModelScope)
 
             service.currentTrackCount.onEach { count ->
-                _uiState.value = _uiState.value.copy(currentTrackPointCount = count)
+                _uiState.update { it.copy(currentTrackPointCount = count) }
             }.launchIn(viewModelScope)
         }
     }
@@ -125,9 +133,11 @@ class HomeViewModel(
         context.startService(intent)
     }
 
+    /**
+     * 現在地の住所を取得して表示用に更新します。
+     */
     fun fetchCurrentAddress() {
-        // 先に「取得中...」と表示させて視覚的なフィードバックを返す
-        _uiState.value = _uiState.value.copy(currentAddress = "取得中...")
+        _uiState.update { it.copy(currentAddress = "取得中...") }
 
         viewModelScope.launch {
             val settings = database.settingsDao().getSettings().first()
@@ -144,15 +154,13 @@ class HomeViewModel(
                         lastTrackPoint.longitude
                     )
                     if (address != null) {
-                        val tempRecord = AddressRecord(
-                            address = address
-                        )
-                        _uiState.value = _uiState.value.copy(currentAddress = tempRecord.addressDisplay())
+                        val tempRecord = AddressRecord(address = address)
+                        _uiState.update { it.copy(currentAddress = tempRecord.addressDisplay()) }
                     } else {
-                        _uiState.value = _uiState.value.copy(currentAddress = "住所を取得できませんでした")
+                        _uiState.update { it.copy(currentAddress = "住所を取得できませんでした") }
                     }
                 } else {
-                    _uiState.value = _uiState.value.copy(currentAddress = "精度の高い位置情報がまだ記録されていません")
+                    _uiState.update { it.copy(currentAddress = "精度の高い位置情報がまだ記録されていません") }
                 }
             } else {
                 // 停止中: 現在の位置情報をリクエスト
@@ -166,25 +174,15 @@ class HomeViewModel(
                         location.longitude
                     )
                     if (address != null) {
-                        val tempRecord = AddressRecord(
-                            address = address
-                        )
-                        _uiState.value = _uiState.value.copy(currentAddress = tempRecord.addressDisplay())
+                        val tempRecord = AddressRecord(address = address)
+                        _uiState.update { it.copy(currentAddress = tempRecord.addressDisplay()) }
                     } else {
-                        _uiState.value = _uiState.value.copy(currentAddress = "住所を取得できませんでした")
+                        _uiState.update { it.copy(currentAddress = "住所を取得できませんでした") }
                     }
-                    
-                    // 【修正】住所をデータベースには保存しない（表示のみ）
-                    /*
-                    locationManager.saveAddressRecord(
-                        lat = location.latitude,
-                        lng = location.longitude
-                    )
-                    */
                 } else if (location != null) {
-                    _uiState.value = _uiState.value.copy(currentAddress = "位置情報の精度が不十分です (${location.accuracy}m)")
+                    _uiState.update { it.copy(currentAddress = "位置情報の精度が不十分です (${location.accuracy}m)") }
                 } else {
-                    _uiState.value = _uiState.value.copy(currentAddress = "現在地を取得できませんでした")
+                    _uiState.update { it.copy(currentAddress = "現在地を取得できませんでした") }
                 }
             }
         }
@@ -192,9 +190,8 @@ class HomeViewModel(
 
     fun onPermissionsResult(granted: Boolean) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                hasHealthConnectPermissions = healthConnectManager.hasPermissions()
-            )
+            val hasPermissions = healthConnectManager.hasPermissions()
+            _uiState.update { it.copy(hasHealthConnectPermissions = hasPermissions) }
         }
     }
 
