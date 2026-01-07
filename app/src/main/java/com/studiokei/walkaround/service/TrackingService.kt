@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.studiokei.walkaround.R
 import com.studiokei.walkaround.data.database.AppDatabase
+import com.studiokei.walkaround.data.model.AddressRecord
 import com.studiokei.walkaround.data.model.Section
 import com.studiokei.walkaround.data.model.StepSegment
 import com.studiokei.walkaround.data.model.TrackPoint
@@ -23,6 +24,7 @@ import com.studiokei.walkaround.ui.HealthConnectManager
 import com.studiokei.walkaround.ui.LocationManager
 import com.studiokei.walkaround.ui.StepSensorManager
 import com.studiokei.walkaround.util.Constants
+import com.studiokei.walkaround.util.TextToSpeechHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,6 +36,9 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
+/**
+ * 位置情報と歩数をバックグラウンドで計測し続けるフォアグラウンドサービス。
+ */
 class TrackingService : Service() {
 
     private val binder = LocalBinder()
@@ -42,6 +47,8 @@ class TrackingService : Service() {
     private lateinit var database: AppDatabase
     private lateinit var stepSensorManager: StepSensorManager
     private lateinit var locationManager: LocationManager
+    // 共通のTTS（音声読み上げ）ヘルパー
+    private lateinit var ttsHelper: TextToSpeechHelper
 
     private var currentSessionId: Long? = null
     private var startTime: Long = 0L
@@ -50,7 +57,7 @@ class TrackingService : Service() {
     private var trackPointCounter = 0
     private var isStartAddressSaved = false
     
-    // 住所の動的保存用
+    // 住所の動的保存・案内用
     private var lastThoroughfareKey: String? = null
     private var lastAddressProcessTime: Long = 0L
     private var accuracyLimit: Float = 20.0f
@@ -76,6 +83,8 @@ class TrackingService : Service() {
         val healthConnectManager = HealthConnectManager(this)
         stepSensorManager = StepSensorManager(this, healthConnectManager)
         locationManager = LocationManager(this)
+        // TTSヘルパーの初期化
+        ttsHelper = TextToSpeechHelper(this)
 
         createNotificationChannel()
 
@@ -172,7 +181,7 @@ class TrackingService : Service() {
             val insertedId = database.trackPointDao().insertTrackPoint(trackPoint)
             val sessionId = currentSessionId
 
-            // 住所保存のロジック (設定された精度制限を使用)
+            // 住所保存と音声案内のロジック
             if (location.accuracy <= accuracyLimit) {
                 if (!isStartAddressSaved) {
                     // 最初の住所保存
@@ -189,9 +198,14 @@ class TrackingService : Service() {
                             trackId = insertedId,
                             timestamp = currentTime
                         )
+                        // 計測開始時の住所を案内
+                        val speakText = AddressRecord(address = address).cityDisplayWithFeature()
+                        if (!speakText.isNullOrBlank()) {
+                            ttsHelper.speak("計測を開始しました。現在地は $speakText です。")
+                        }
                     }
                 } else if (currentTime - lastAddressProcessTime >= Constants.ADDRESS_PROCESS_INTERVAL_MS) {
-                    // 一定時間経過後の丁目変化チェック (共通メソッドを使用)
+                    // 丁目変化チェック
                     serviceScope.launch {
                         val newKey = locationManager.saveAddressIfThoroughfareChanged(
                             lat = location.latitude,
@@ -203,8 +217,13 @@ class TrackingService : Service() {
                         )
                         if (newKey != null) {
                             lastThoroughfareKey = newKey
+                            // 丁目が変化した際に新しい住所を読み上げる
+                            val address = locationManager.getLocaleAddress(location.latitude, location.longitude)
+                            val speakText = AddressRecord(address = address).cityDisplayWithFeature()
+                            if (!speakText.isNullOrBlank()) {
+                                ttsHelper.speak(speakText)
+                            }
                         }
-                        // 住所取得を試みた時間を更新（頻度抑制）
                         lastAddressProcessTime = System.currentTimeMillis()
                     }
                 }
@@ -275,6 +294,9 @@ class TrackingService : Service() {
                     )
                     database.sectionDao().updateSection(updatedSection)
                 }
+                
+                // 計測終了時の案内
+                ttsHelper.speak("計測を終了しました。お疲れ様でした。")
             }
             currentSessionId = null
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -287,7 +309,7 @@ class TrackingService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Tracking Service Channel",
-                NotificationManager.IMPORTANCE_LOW // 音やバイブレーションを抑制
+                NotificationManager.IMPORTANCE_LOW
             )
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -300,14 +322,25 @@ class TrackingService : Service() {
             .setContentText(content)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW) // 優先度を低く設定
-            .setSilent(true) // 明示的にサイレント設定
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
             .build()
     }
 
     private fun updateNotification(content: String) {
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.notify(NOTIFICATION_ID, createNotification(content))
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // TTSヘルパーの終了処理を追加
+        if (::ttsHelper.isInitialized) {
+            ttsHelper.shutdown()
+        }
+        serviceScope.launch {
+            Job().cancel() 
+        }
     }
 
     companion object {

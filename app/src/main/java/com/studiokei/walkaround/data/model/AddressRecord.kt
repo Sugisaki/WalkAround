@@ -34,7 +34,6 @@ data class AddressRecord(
 
     /**
      * Android の Address オブジェクトから AddressRecord を生成するための 2 次コンストラクタ。
-     * 表示用などの用途では、address 以外の引数を省略可能です。
      */
     @Ignore
     constructor(
@@ -53,8 +52,10 @@ data class AddressRecord(
         lng = lng,
         name = address?.let { addr ->
             val fName = addr.featureName
-            // featureName が数字と記号だけの場合は name を null にする
-            if (fName != null && fName.any { it.isLetter() }) fName else null
+            // 数字、記号、空白以外の文字（漢字、かな、カナ、アルファベットなど）が含まれているかチェック
+            // 全角・半角の数字および記号のみの文字列は除外する
+            val filterRegex = Regex("[^0-9０-９\\p{Punct}\\p{IsPunctuation}\\s　]")
+            if (fName != null && fName.contains(filterRegex)) fName else null
         },
         addressLine = address?.getAddressLine(0),
         adminArea = address?.adminArea,
@@ -87,7 +88,7 @@ data class AddressRecord(
             addressLine
         }
 
-        // 2. 末尾に name (建物名など) が含まれていたら削除
+        // 2. 末尾に name (建物名など) が含まれていたら削除（重複防止）
         if (!name.isNullOrBlank() && display.endsWith(name)) {
             display = display.removeSuffix(name).trim().removeSuffix("、").removeSuffix(",").trim()
         }
@@ -100,7 +101,7 @@ data class AddressRecord(
             }
         }
 
-        // 4. 末尾が "数字-数字(-数字...)" の場合、最初のハイフン以降を削除 (全角/半角対応)
+        // 4. 末尾が "数字-数字" 形式の場合、最初のハイフン以降を削除
         val pattern = Regex("([0-9０-９]+)(?:[-－−‐][0-9０-９]+)+$")
         display = display.replace(pattern, "$1")
 
@@ -127,7 +128,6 @@ data class AddressRecord(
         }
 
         // 地点名（name）が住所の末尾に含まれている場合は、それを取り除く
-        // これにより「住所」と「地点名」を確実に別々の行で表示できるようにする
         if (!name.isNullOrBlank() && display.endsWith(name)) {
             display = display.removeSuffix(name).trim().removeSuffix("、").removeSuffix(",").trim()
         }
@@ -136,15 +136,44 @@ data class AddressRecord(
     }
 
     /**
+     * 表示用の地点名称（建物名など）を返します。
+     * 住所本体（addressDisplay）の末尾と一致する場合や、名称が空の場合は null を返します。
+     */
+    fun featureNameDisplay(): String? {
+        val baseAddress = addressDisplay()
+        // 名称（name）が有効であり、かつ住所本体の末尾と一致しない場合のみ名称を返す
+        return if (!name.isNullOrBlank() && baseAddress != null && !baseAddress.endsWith(name)) {
+            name
+        } else {
+            null
+        }
+    }
+
+    /**
+     * 名称（建物名など）を含めた市区町村以下の住所表示を返します。
+     * 音声読み上げ時に適切な「間」を空けるため、住所と名称の間には句点を入れています。
+     */
+    fun cityDisplayWithFeature(): String? {
+        val cityAddress = cityDisplay() ?: return null
+        val featureName = featureNameDisplay()
+        
+        return if (featureName != null) {
+            // 読み上げ時に自然なポーズが入るよう、句点とスペースで区切る
+            "$cityAddress。 $featureName"
+        } else {
+            cityAddress
+        }
+    }
+
+    /**
      * 名称（建物名など）を含めた住所表示を返します。
-     * 名称が数字・記号のみの場合はフィルタリングされ、住所本体と重複する場合は付加しません。
      */
     fun addressDisplayWithFeature(): String? {
         val baseAddress = addressDisplay() ?: return null
+        val featureName = featureNameDisplay()
         
-        // 有効な名称（name）があり、かつベースの住所（既にnameを除去済み）に含まれていない場合のみ付加
-        return if (!name.isNullOrBlank() && !baseAddress.contains(name)) {
-            "$baseAddress\n$name"
+        return if (featureName != null) {
+            "$baseAddress\n$featureName"
         } else {
             baseAddress
         }

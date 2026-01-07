@@ -12,6 +12,7 @@ import com.studiokei.walkaround.data.model.AddressRecord
 import com.studiokei.walkaround.data.model.SectionSummary
 import com.studiokei.walkaround.service.TrackingService
 import com.studiokei.walkaround.ui.StepSensorManager.SensorMode
+import com.studiokei.walkaround.util.TextToSpeechHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +33,7 @@ data class HomeUiState(
     val currentTrackPointCount: Int = 0,
     val todayStepCount: Int = 0,
     val currentAddress: String? = null,
-    val currentFeatureName: String? = null, // 地点名称（建物名など）を個別に保持
+    val currentFeatureName: String? = null,
     val showAddressDialog: Boolean = false,
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
     val hasHealthConnectPermissions: Boolean = false,
@@ -42,6 +43,7 @@ data class HomeUiState(
 
 /**
  * ホーム画面の状態を管理するViewModel。
+ * 住所の取得および共通ヘルパーを使用した音声読み上げ（TTS）の制御も行います。
  */
 class HomeViewModel(
     private val context: Context,
@@ -56,6 +58,9 @@ class HomeViewModel(
     private val locationManager = LocationManager(context)
     private var trackingService: TrackingService? = null
     private var isBound = false
+
+    // 共通の音声読み上げヘルパー
+    private val ttsHelper = TextToSpeechHelper(context)
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -89,12 +94,12 @@ class HomeViewModel(
                 _uiState.update { it.copy(todayStepCount = count ?: 0) }
             }.launchIn(viewModelScope)
 
-            // 設定の監視（単位など）
+            // 設定の監視
             database.settingsDao().getSettings().onEach { settings ->
                 _uiState.update { it.copy(displayUnit = settings?.displayUnit ?: "km") }
             }.launchIn(viewModelScope)
 
-            // センサーモードとヘルスコネクト権限の初期確認
+            // センサーモード等の初期確認
             val hasPermissions = healthConnectManager.hasPermissions()
             _uiState.update { 
                 it.copy(
@@ -139,8 +144,7 @@ class HomeViewModel(
     }
 
     /**
-     * 現在地の住所を取得して表示用に更新し、ダイアログを表示します。
-     * 住所と地点名称を個別に取得してUI状態にセットします。
+     * 現在地の住所を取得してダイアログを表示し、音声で読み上げます。
      */
     fun fetchCurrentAddress() {
         _uiState.update { it.copy(
@@ -156,16 +160,17 @@ class HomeViewModel(
             if (_uiState.value.isRunning) {
                 // 走行中: DBから最後に保存された、精度の高い TrackPoint を取得
                 val lastTrackPoint = database.trackPointDao().getLastAccurateTrackPoint(accuracyLimit)
-                
                 if (lastTrackPoint != null) {
                     // 保存されたロケール（あれば）を使用して住所を取得
                     val address = locationManager.getLocaleAddress(
                         lastTrackPoint.latitude,
                         lastTrackPoint.longitude
                     )
-                    updateAddressState(address)
+                    updateAddressStateAndSpeak(address)
                 } else {
-                    _uiState.update { it.copy(currentAddress = "精度の高い位置情報がまだ記録されていません") }
+                    val msg = "精度の高い位置情報がまだ記録されていません"
+                    _uiState.update { it.copy(currentAddress = msg) }
+                    ttsHelper.speak(msg)
                 }
             } else {
                 // 停止中: 現在の位置情報をリクエスト
@@ -178,42 +183,48 @@ class HomeViewModel(
                         location.latitude,
                         location.longitude
                     )
-                    updateAddressState(address)
+                    updateAddressStateAndSpeak(address)
                 } else if (location != null) {
-                    _uiState.update { it.copy(currentAddress = "位置情報の精度が不十分です (${location.accuracy}m)") }
+                    val msg = "位置情報の精度が不十分です"
+                    _uiState.update { it.copy(currentAddress = msg) }
+                    ttsHelper.speak(msg)
                 } else {
-                    _uiState.update { it.copy(currentAddress = "現在地を取得できませんでした") }
+                    val msg = "現在地を取得できませんでした"
+                    _uiState.update { it.copy(currentAddress = msg) }
+                    ttsHelper.speak(msg)
                 }
             }
         }
     }
 
     /**
-     * 取得したAddressオブジェクトからUI状態を更新します。
+     * 取得したAddressオブジェクトからUI状態を更新し、ヘルパー経由で読み上げを実行します。
      */
-    private fun updateAddressState(address: android.location.Address?) {
+    private fun updateAddressStateAndSpeak(address: android.location.Address?) {
         if (address != null) {
             val tempRecord = AddressRecord(address = address)
-            val baseAddress = tempRecord.addressDisplay()
             
-            // 名称（name）が住所本体の末尾と一致する場合は、個別表示の名称を null にする
-            val featureName = if (tempRecord.name != null && baseAddress != null && !baseAddress.endsWith(tempRecord.name!!)) {
-                tempRecord.name
-            } else {
-                null
-            }
+            val baseAddress = tempRecord.addressDisplay()
+            val featureName = tempRecord.featureNameDisplay()
 
             _uiState.update { it.copy(
                 currentAddress = baseAddress,
                 currentFeatureName = featureName
             ) }
+
+            // 読み上げ用：市区町村以下の簡潔な住所 + 名称 を使用
+            val speakContent = tempRecord.cityDisplayWithFeature() ?: ""
+            ttsHelper.speak(speakContent)
         } else {
-            _uiState.update { it.copy(currentAddress = "住所を取得できませんでした") }
+            val msg = "住所を取得できませんでした"
+            _uiState.update { it.copy(currentAddress = msg) }
+            ttsHelper.speak(msg)
         }
     }
 
     fun dismissAddressDialog() {
         _uiState.update { it.copy(showAddressDialog = false) }
+        ttsHelper.stop() // ダイアログを閉じたら読み上げも止める
     }
 
     fun onPermissionsResult(granted: Boolean) {
@@ -229,5 +240,7 @@ class HomeViewModel(
             context.unbindService(connection)
             isBound = false
         }
+        // ヘルパーのリソースを解放
+        ttsHelper.shutdown()
     }
 }
