@@ -52,7 +52,6 @@ class MainActivity : ComponentActivity() {
             val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
 
             // テーマ（ライト/ダーク）の判定ロジック
-            // 「システムのテーマ設定に従う」がオンならシステムの値を、オフなら手動設定の値を使用する
             val darkTheme = if (settingsUiState.followSystemTheme) {
                 isSystemInDarkTheme()
             } else {
@@ -70,7 +69,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun WalkaroundApp() {
     var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
-    // 選択されたセクションIDを保持（スクロール制御に使用）
+    // 選択されたセクションIDを保持（スクロールおよびハイライト制御に使用）
     var selectedSectionId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     NavigationSuiteScaffold(
@@ -85,7 +84,14 @@ fun WalkaroundApp() {
                     },
                     label = { Text(it.label) },
                     selected = it == currentDestination,
-                    onClick = { currentDestination = it }
+                    onClick = { 
+                        currentDestination = it
+                        // ナビゲーションメニューで切り替えた際に、必要に応じて選択状態をクリア
+                        // 例：Homeに戻った時は選択を解除する
+                        if (it == AppDestinations.HOME) {
+                            selectedSectionId = null
+                        }
+                    }
                 )
             }
         }
@@ -95,7 +101,7 @@ fun WalkaroundApp() {
                 AppDestinations.HOME -> HomeScreen(
                     modifier = Modifier.padding(innerPadding),
                     onSectionClick = { sectionId ->
-                        // Home画面でセクションがタップされたら、Route画面へ遷移しスクロール対象として保持
+                        // Home画面でセクションがタップされたら、Route画面へ遷移しIDを保持
                         selectedSectionId = sectionId
                         currentDestination = AppDestinations.ROUTE
                     }
@@ -104,11 +110,11 @@ fun WalkaroundApp() {
                     modifier = Modifier.padding(innerPadding),
                     scrollToSectionId = selectedSectionId,
                     onScrollFinished = {
-                        // スクロールが完了したらIDをクリアして、意図しない再スクロールを防ぐ
-                        selectedSectionId = null
+                        // RouteScreen内部でスクロール済みフラグを管理するようになったため、
+                        // ここではIDをクリアせず、ハイライト表示のために保持し続ける。
                     },
                     onSectionClick = { sectionId ->
-                        // Route画面内でセクションがタップされたら、従来通りMap画面へ遷移
+                        // Route画面内でセクションがタップされたら、Map画面へ遷移
                         selectedSectionId = sectionId
                         currentDestination = AppDestinations.MAP
                     }

@@ -1,5 +1,6 @@
 package com.studiokei.walkaround.ui
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,6 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,7 +41,7 @@ import java.time.Instant
  * 経路履歴画面。
  * セクションごとにグループ化された住所録を表示します。
  * 
- * @param scrollToSectionId このIDが指定されている場合、そのセクションまで自動スクロールします。
+ * @param scrollToSectionId このIDが指定されている場合、そのセクションまで自動スクロールし、ハイライト表示します。
  * @param onScrollFinished スクロール完了時に呼び出されるコールバック。
  * @param onSectionClick セクションがクリックされた際（地図表示など）の処理。
  */
@@ -64,15 +68,22 @@ fun RouteScreen(
     // リストの状態を保持し、スクロール操作を可能にする
     val listState = rememberLazyListState()
 
+    // すでにスクロール済みのIDを保持し、リスト更新時の再スクロールを防ぐ
+    var lastScrolledId by rememberSaveable { mutableStateOf<Long?>(null) }
+
     // scrollToSectionId が指定された場合に、該当アイテムまでスクロールする処理
     LaunchedEffect(scrollToSectionId, uiState.groupedAddresses) {
-        if (scrollToSectionId != null && uiState.groupedAddresses.isNotEmpty()) {
+        if (scrollToSectionId != null && 
+            scrollToSectionId != lastScrolledId && 
+            uiState.groupedAddresses.isNotEmpty()
+        ) {
             // 指定されたセクションIDを持つアイテムのインデックスを検索
             val index = uiState.groupedAddresses.indexOfFirst { it.sectionId == scrollToSectionId }
             if (index != -1) {
                 // 該当アイテムまで即座にスクロール
                 listState.scrollToItem(index)
-                // スクロール完了を通知してIDをリセットさせる
+                lastScrolledId = scrollToSectionId
+                // スクロール完了を通知
                 onScrollFinished()
             }
         }
@@ -91,6 +102,7 @@ fun RouteScreen(
                 SectionBlock(
                     group = group,
                     displayUnit = uiState.displayUnit,
+                    isHighlighted = group.sectionId == scrollToSectionId, // ハイライト判定
                     onUpdateClick = { group.sectionId?.let { viewModel.updateSectionAddresses(it) } },
                     onClick = { group.sectionId?.let { onSectionClick(it) } }
                 )
@@ -103,12 +115,23 @@ fun RouteScreen(
 fun SectionBlock(
     group: SectionGroup,
     displayUnit: String,
+    isHighlighted: Boolean = false, // ハイライト引数を追加
     onUpdateClick: () -> Unit,
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .then(
+                // ハイライト時はボーダーを表示
+                if (isHighlighted) {
+                    Modifier.border(
+                        width = 3.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = MaterialTheme.shapes.medium
+                    )
+                } else Modifier
+            ),
         onClick = onClick
     ) {
         Column(
@@ -121,7 +144,7 @@ fun SectionBlock(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 左側：日付表示（共通のフォーマッタを使用）
+                // 左側：日付表示
                 val dateText = group.createdAtTimestamp?.let {
                     DateTimeFormatUtils.headerDateFormatter.format(Instant.ofEpochMilli(it))
                 } ?: "日付不明"
