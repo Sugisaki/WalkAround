@@ -30,5 +30,9 @@ data class Settings(
 
     // 位置情報の許容精度 (m)
     @ColumnInfo(defaultValue = "20.0")
-    val locationAccuracyLimit: Float = 20.0f
+    val locationAccuracyLimit: Float = 20.0f,
+
+    // システムのテーマ設定に従うかどうか
+    @ColumnInfo(defaultValue = "1")
+    val followSystemTheme: Boolean = true
 )

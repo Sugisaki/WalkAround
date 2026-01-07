@@ -183,22 +183,45 @@ fun SettingsScreen(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             }
 
-            // ダークモード設定
+            // 表示モード（テーマ）設定
             SettingCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("ダークモード:")
-                    Spacer(modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = uiState.isDarkMode,
-                        onCheckedChange = { settingsViewModel.updateDarkMode(it) }
-                    )
+                Column {
+                    // システム設定に従うスイッチ
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("システムのテーマ設定に従う:")
+                        Spacer(modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = uiState.followSystemTheme,
+                            onCheckedChange = { settingsViewModel.updateFollowSystemTheme(it) }
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 個別のダークモードスイッチ
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // システム設定に従う場合はグレーアウトして表示
+                        Text(
+                            text = "ダークモード:",
+                            color = if (uiState.followSystemTheme) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) 
+                                    else MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = uiState.isDarkMode,
+                            onCheckedChange = { settingsViewModel.updateDarkMode(it) },
+                            enabled = !uiState.followSystemTheme // システムに従う場合は無効化
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
-
 
             // 位置情報の許容精度設定
             SettingCard {

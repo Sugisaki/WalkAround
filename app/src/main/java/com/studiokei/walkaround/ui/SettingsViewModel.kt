@@ -9,12 +9,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * 設定画面の状態管理を行うViewModel。
+ */
 class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     init {
+        // データベースから設定を読み込み、UI状態に反映する
         viewModelScope.launch {
             database.settingsDao().getSettings().collect { settings ->
                 _uiState.value = settings?.let {
@@ -25,9 +29,10 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
                         isNotificationEnabled = it.isNotificationEnabled,
                         volume = it.volume,
                         medianWindowSize = it.medianWindowSize,
-                        locationAccuracyLimit = it.locationAccuracyLimit
+                        locationAccuracyLimit = it.locationAccuracyLimit,
+                        followSystemTheme = it.followSystemTheme
                     )
-                } ?: SettingsUiState() // Default values if no settings found
+                } ?: SettingsUiState() // 設定が見つからない場合はデフォルト値を使用
             }
         }
     }
@@ -44,6 +49,11 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
 
     fun updateDarkMode(isDark: Boolean) {
         _uiState.value = _uiState.value.copy(isDarkMode = isDark)
+        saveSettings()
+    }
+
+    fun updateFollowSystemTheme(follow: Boolean) {
+        _uiState.value = _uiState.value.copy(followSystemTheme = follow)
         saveSettings()
     }
 
@@ -67,24 +77,32 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
         saveSettings()
     }
 
+    /**
+     * 現在のUI状態をデータベースに保存する。
+     */
     private fun saveSettings() {
         viewModelScope.launch {
             val currentSettings = _uiState.value
             database.settingsDao().insertSettings(
                 Settings(
+                    id = 1, // 常にID 1のレコードを更新/作成する
                     stepInterval = currentSettings.stepInterval,
                     displayUnit = currentSettings.displayUnit,
                     isDarkMode = currentSettings.isDarkMode,
                     isNotificationEnabled = currentSettings.isNotificationEnabled,
                     volume = currentSettings.volume,
                     medianWindowSize = currentSettings.medianWindowSize,
-                    locationAccuracyLimit = currentSettings.locationAccuracyLimit
+                    locationAccuracyLimit = currentSettings.locationAccuracyLimit,
+                    followSystemTheme = currentSettings.followSystemTheme
                 )
             )
         }
     }
 }
 
+/**
+ * 設定画面のUI状態。
+ */
 data class SettingsUiState(
     val stepInterval: Int = 500,
     val displayUnit: String = "km",
@@ -92,5 +110,6 @@ data class SettingsUiState(
     val isNotificationEnabled: Boolean = true,
     val volume: Float = 0.5f,
     val medianWindowSize: Int = 7,
-    val locationAccuracyLimit: Float = 20.0f
+    val locationAccuracyLimit: Float = 20.0f,
+    val followSystemTheme: Boolean = true
 )

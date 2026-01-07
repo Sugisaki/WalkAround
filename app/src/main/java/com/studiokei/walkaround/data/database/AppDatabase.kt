@@ -15,11 +15,12 @@ import com.studiokei.walkaround.data.model.TrackPoint
 
 @Database(
     entities = [Settings::class, TrackPoint::class, Section::class, StepSegment::class, AddressRecord::class],
-    version = 11,
+    version = 12,
     autoMigrations = [
         AutoMigration(from = 7, to = 8),
         AutoMigration(from = 8, to = 9),
-        AutoMigration(from = 10, to = 11)
+        AutoMigration(from = 10, to = 11),
+        AutoMigration(from = 11, to = 12)
     ],
     exportSchema = true
 )

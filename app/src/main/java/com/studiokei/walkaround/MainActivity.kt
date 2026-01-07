@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -23,10 +24,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.ui.HomeScreen
 import com.studiokei.walkaround.ui.MapScreen
 import com.studiokei.walkaround.ui.RouteScreen
 import com.studiokei.walkaround.ui.SettingsScreen
+import com.studiokei.walkaround.ui.SettingsViewModel
 import com.studiokei.walkaround.ui.theme.WalkaroundTheme
 
 class MainActivity : ComponentActivity() {
@@ -34,7 +41,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            WalkaroundTheme {
+            // アプリ全体の設定を管理するViewModelを取得
+            val settingsViewModel: SettingsViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer {
+                        SettingsViewModel(AppDatabase.getDatabase(applicationContext))
+                    }
+                }
+            )
+            val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+
+            // テーマ（ライト/ダーク）の判定ロジック
+            // 「システムのテーマ設定に従う」がオンならシステムの値を、オフなら手動設定の値を使用する
+            val darkTheme = if (settingsUiState.followSystemTheme) {
+                isSystemInDarkTheme()
+            } else {
+                settingsUiState.isDarkMode
+            }
+
+            WalkaroundTheme(darkTheme = darkTheme) {
                 WalkaroundApp()
             }
         }
