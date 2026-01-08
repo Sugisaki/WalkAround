@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.location.Location
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -28,6 +29,7 @@ import com.studiokei.walkaround.util.TextToSpeechHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,6 +37,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 位置情報と歩数をバックグラウンドで計測し続けるフォアグラウンドサービス。
@@ -47,21 +51,27 @@ class TrackingService : Service() {
     private lateinit var database: AppDatabase
     private lateinit var stepSensorManager: StepSensorManager
     private lateinit var locationManager: LocationManager
-    // 共通のTTS（音声読み上げ）ヘルパー
     private lateinit var ttsHelper: TextToSpeechHelper
 
     private var currentSessionId: Long? = null
     private var startTime: Long = 0L
     private var sensorJob: Job? = null
     private var locationJob: Job? = null
+    private var addressCheckJob: Job? = null
+    
     private var trackPointCounter = 0
     private var isStartAddressSaved = false
     
-    // 住所の動的保存・案内用
     private var lastThoroughfareKey: String? = null
-    private var lastAddressProcessTime: Long = 0L
     private var accuracyLimit: Float = 20.0f
-    private var isVoiceEnabled: Boolean = true // 音声設定の保持用
+    private var isVoiceEnabled: Boolean = true
+
+    private var lastAccurateLocation: Location? = null
+    private var lastAccurateTrackId: Long? = null
+    // 最後に「住所チェック（ジオコーディング呼び出し）」が正常に成功した地点
+    private var lastProcessedLocation: Location? = null
+    
+    private val addressCheckMutex = Mutex()
 
     private val _currentSteps = MutableStateFlow(0)
     val currentSteps: StateFlow<Int> = _currentSteps.asStateFlow()
@@ -84,7 +94,6 @@ class TrackingService : Service() {
         val healthConnectManager = HealthConnectManager(this)
         stepSensorManager = StepSensorManager(this, healthConnectManager)
         locationManager = LocationManager(this)
-        // TTSヘルパーの初期化
         ttsHelper = TextToSpeechHelper(this)
 
         createNotificationChannel()
@@ -94,7 +103,6 @@ class TrackingService : Service() {
             database.settingsDao().getSettings().collect { settings ->
                 accuracyLimit = settings?.locationAccuracyLimit ?: 20.0f
                 isVoiceEnabled = settings?.isVoiceEnabled ?: true
-                Log.d("TrackingService", "Settings updated: limit=$accuracyLimit, voice=$isVoiceEnabled")
             }
         }
     }
@@ -116,7 +124,9 @@ class TrackingService : Service() {
         trackPointCounter = 0
         isStartAddressSaved = false
         lastThoroughfareKey = null
-        lastAddressProcessTime = 0L
+        lastAccurateLocation = null
+        lastAccurateTrackId = null
+        lastProcessedLocation = null
         startTime = System.currentTimeMillis()
 
         // 権限の状態を確認して、フォアグラウンドサービスのタイプを決定する
@@ -150,6 +160,7 @@ class TrackingService : Service() {
 
         launchStepMeasurement()
         launchLocationMeasurement()
+        startAddressCheckTimer()
 
         serviceScope.launch {
             val newSection = Section(
@@ -185,55 +196,22 @@ class TrackingService : Service() {
 
             // 住所保存と音声案内のロジック
             if (location.accuracy <= accuracyLimit) {
+                lastAccurateLocation = location
+                lastAccurateTrackId = insertedId
+
+                // 200m移動による割り込みチェック
+                val dist = lastProcessedLocation?.distanceTo(location) ?: Float.MAX_VALUE
+                if (dist >= 200f && isStartAddressSaved) {
+                    serviceScope.launch { processAddressCheck() }
+                }
+
+                // 開始時の住所保存
                 if (!isStartAddressSaved) {
                     // 最初の住所保存
                     isStartAddressSaved = true
-                    lastAddressProcessTime = currentTime
                     serviceScope.launch {
                         locationManager.updateCachedLocale(location.latitude, location.longitude)
-                        val address = locationManager.getLocaleAddress(location.latitude, location.longitude)
-                        lastThoroughfareKey = locationManager.getAddressKey(address)
-                        locationManager.saveAddressRecord(
-                            lat = location.latitude,
-                            lng = location.longitude,
-                            sectionId = sessionId,
-                            trackId = insertedId,
-                            timestamp = currentTime
-                        )
-                        // 計測開始時の案内（音声設定が有効な場合のみ）
-                        if (isVoiceEnabled) {
-                            val speakText = AddressRecord(address = address).cityDisplayWithFeature()
-                            val msg = if (!speakText.isNullOrBlank()) {
-                                "計測を開始しました。現在地は $speakText です。"
-                            } else {
-                                "計測を開始しました。"
-                            }
-                            ttsHelper.speak(msg)
-                        }
-                    }
-                } else if (currentTime - lastAddressProcessTime >= Constants.ADDRESS_PROCESS_INTERVAL_MS) {
-                    // 丁目変化チェック
-                    serviceScope.launch {
-                        val newKey = locationManager.saveAddressIfThoroughfareChanged(
-                            lat = location.latitude,
-                            lng = location.longitude,
-                            sectionId = sessionId,
-                            trackId = insertedId,
-                            timestamp = currentTime,
-                            lastAddressKey = lastThoroughfareKey
-                        )
-                        if (newKey != null) {
-                            lastThoroughfareKey = newKey
-                            // 丁目が変化した際の読み上げ（音声設定が有効な場合のみ）
-                            if (isVoiceEnabled) {
-                                val address = locationManager.getLocaleAddress(location.latitude, location.longitude)
-                                val speakText = AddressRecord(address = address).cityDisplayWithFeature()
-                                if (!speakText.isNullOrBlank()) {
-                                    ttsHelper.speak(speakText)
-                                }
-                            }
-                        }
-                        lastAddressProcessTime = System.currentTimeMillis()
+                        processAddressCheck(isInitial = true)
                     }
                 }
             }
@@ -253,11 +231,85 @@ class TrackingService : Service() {
         }.launchIn(serviceScope)
     }
 
+    private fun startAddressCheckTimer() {
+        addressCheckJob?.cancel()
+        addressCheckJob = serviceScope.launch {
+            while (true) {
+                delay(Constants.ADDRESS_PROCESS_INTERVAL_MS)
+                processAddressCheck()
+            }
+        }
+    }
+
+    /**
+     * 住所の変化をチェックし、必要に応じて保存と案内を行います。
+     * @param isInitial 開始時の即時処理フラグ
+     */
+    private suspend fun processAddressCheck(isInitial: Boolean = false) = addressCheckMutex.withLock {
+        val location = lastAccurateLocation ?: return
+        val trackId = lastAccurateTrackId
+        val sessionId = currentSessionId
+        val currentTime = System.currentTimeMillis()
+
+        // 距離判定の最適化: 
+        // 5m未満の微細な移動でも、まだ「その場所」の住所を一度も取得できていない（lastProcessedLocationがnull）場合は
+        // スキップせずにアグレッシブに取得を試みます。
+        val distance = lastProcessedLocation?.distanceTo(location) ?: Float.MAX_VALUE
+        if (!isInitial && distance < 5f && lastProcessedLocation != null && lastThoroughfareKey != null) {
+            // すでに直近で住所取得に成功しており、かつ移動が小さい場合はスキップ
+            return
+        }
+
+        Log.d("TrackingService", "Address check triggered: dist=$distance, initial=$isInitial")
+
+        // 住所オブジェクトを取得（1回のみ）
+        val address = locationManager.getLocaleAddress(location.latitude, location.longitude)
+        
+        if (address == null) {
+            Log.w("TrackingService", "Address fetch failed (Geocoder returned null). Will retry.")
+            // 失敗した場合は lastProcessedLocation を更新せず、次回のタイマー等でのリトライを許容する
+            return
+        }
+
+        // 取得に成功したので、この地点（またはそのごく近傍）は「判定済み」として記録
+        lastProcessedLocation = Location(location)
+        
+        val currentKey = locationManager.getAddressKey(address)
+        val isKeyChanged = currentKey != lastThoroughfareKey
+
+        Log.d("TrackingService", "Comparing address keys: current='$currentKey', last='$lastThoroughfareKey', changed=$isKeyChanged")
+
+        if (isKeyChanged || isInitial) {
+            Log.i("TrackingService", "Updating address record. Key: $currentKey")
+            lastThoroughfareKey = currentKey
+            
+            locationManager.saveAddressRecord(
+                lat = location.latitude,
+                lng = location.longitude,
+                sectionId = sessionId,
+                trackId = trackId,
+                timestamp = currentTime,
+                address = address
+            )
+
+            if (isVoiceEnabled) {
+                val speakText = AddressRecord(address = address).cityDisplayWithFeature()
+                if (!speakText.isNullOrBlank()) {
+                    val msg = if (isInitial) "計測を開始しました。現在地は $speakText です。" else speakText
+                    ttsHelper.speak(msg)
+                } else if (isInitial) {
+                    ttsHelper.speak("計測を開始しました。")
+                }
+            }
+        }
+    }
+
     private fun stopTracking() {
         if (!_isRunning.value) return
         
         sensorJob?.cancel()
         locationJob?.cancel()
+        addressCheckJob?.cancel()
         _isRunning.value = false
 
         val sessionId = currentSessionId
@@ -266,17 +318,13 @@ class TrackingService : Service() {
 
         serviceScope.launch {
             val endTime = System.currentTimeMillis()
-            
-            // 最新の精度制限を取得
             val currentSettings = database.settingsDao().getSettings().first()
             val limit = currentSettings?.locationAccuracyLimit ?: 20.0f
 
-            // 精度が一定以上の最後のTrackPointを取得して住所を保存する
             val lastAccuratePoint = database.trackPointDao().getLastAccurateTrackPoint(limit)
             val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
             
             if (sessionId != null) {
-                // 停止時の住所を保存（精度の高い地点があればそれを使う）
                 if (lastAccuratePoint != null) {
                     locationManager.saveAddressRecord(
                         lat = lastAccuratePoint.latitude,
@@ -304,7 +352,6 @@ class TrackingService : Service() {
                     database.sectionDao().updateSection(updatedSection)
                 }
                 
-                // 計測終了時の案内（音声設定が有効な場合のみ）
                 if (isVoiceEnabled) {
                     ttsHelper.speak("計測を終了しました。お疲れ様でした。")
                 }
@@ -345,7 +392,6 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // TTSヘルパーの終了処理を追加
         if (::ttsHelper.isInitialized) {
             ttsHelper.shutdown()
         }

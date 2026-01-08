@@ -100,7 +100,8 @@ class SectionProcessor(
             lng = firstPoint.longitude,
             sectionId = sectionId,
             trackId = firstPoint.id,
-            timestamp = firstPoint.time
+            timestamp = firstPoint.time,
+            address = firstAddress // 取得済みAddressを渡す
         )
         lastSavedTrackId = firstPoint.id
 
@@ -109,7 +110,8 @@ class SectionProcessor(
             val point = allPoints[i]
             
             if (point.time - lastProcessedTime >= Constants.ADDRESS_PROCESS_INTERVAL_MS) {
-                val newKey = locationManager.saveAddressIfThoroughfareChanged(
+                // LocationManagerの戻り値がAddress?に変更されたため、それを受け取る
+                val newAddress = locationManager.saveAddressIfThoroughfareChanged(
                     lat = point.latitude,
                     lng = point.longitude,
                     sectionId = sectionId,
@@ -118,8 +120,9 @@ class SectionProcessor(
                     lastAddressKey = lastAddressKey
                 )
                 
-                if (newKey != null) {
-                    lastAddressKey = newKey
+                if (newAddress != null) {
+                    // 取得したAddressからキーを更新
+                    lastAddressKey = locationManager.getAddressKey(newAddress)
                     lastSavedTrackId = point.id
                 }
                 lastProcessedTime = point.time

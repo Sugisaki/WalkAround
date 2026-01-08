@@ -157,18 +157,20 @@ class LocationManager(private val context: Context) {
 
     /**
      * 住所オブジェクトから比較用のキー（丁目レベル）を生成します。
-     * 比較用の文字列は、市区町村 + 町村 + 丁目/番地
+     * 比較用の文字列は、郵便番号 + 市区町村 + 町村 + 丁目/番地
      */
     fun getAddressKey(address: Address?): String {
+        val postalCode = address?.postalCode?: ""
         val locality = address?.locality ?: ""
         val subLocality = address?.subLocality ?: ""
         val thoroughfare = address?.thoroughfare ?: address?.subThoroughfare ?: ""
-        return "$locality$subLocality$thoroughfare"
+        return "$postalCode$locality$subLocality$thoroughfare"
     }
 
     /**
      * 住所を取得し、前回保存されたキーと異なる場合にのみ保存します。
-     * @return 新しい住所キー。変化がなかった場合や取得失敗時は null。
+     * 重複呼び出しを避けるため、判定に使用した Address オブジェクトを返します。
+     * @return 変化があった場合は取得した Address。変化がない場合や失敗時は null。
      */
     suspend fun saveAddressIfThoroughfareChanged(
         lat: Double,
@@ -177,7 +179,7 @@ class LocationManager(private val context: Context) {
         trackId: Long?,
         timestamp: Long,
         lastAddressKey: String?
-    ): String? {
+    ): Address? {
         val address = getLocaleAddress(lat, lng) ?: return null // 取得失敗時は判定をスキップ
         val currentKey = getAddressKey(address)
         
@@ -190,9 +192,10 @@ class LocationManager(private val context: Context) {
                 lng = lng,
                 sectionId = sectionId,
                 trackId = trackId,
-                timestamp = timestamp
+                timestamp = timestamp,
+                address = address // 取得済みのAddressを渡す
             )
-            return currentKey
+            return address
         }
         return null
     }
@@ -238,39 +241,40 @@ class LocationManager(private val context: Context) {
         }
     }
 
+    /**
+     * 住所レコードを保存します。
+     * 重複呼び出しを防ぐため、外部で取得済みの address を受け取れるようにしています。
+     */
     suspend fun saveAddressRecord(
         lat: Double?,
         lng: Double?,
         sectionId: Long? = null,
         trackId: Long? = null,
-        timestamp: Long? = null
+        timestamp: Long? = null,
+        address: Address? = null // 既に取得済みの場合はこれを使い回す
     ) {
         withContext(Dispatchers.IO) {
             val time = timestamp ?: System.currentTimeMillis()
-            if (lat != null && lng != null) {
-                val address = getLocaleAddress(lat, lng)
-                val record = AddressRecord(
-                    time = time,
-                    sectionId = sectionId,
-                    trackId = trackId,
-                    lat = lat,
-                    lng = lng,
-                    address = address
-                )
-                database.addressDao().insert(record)
-                Log.d("LocationManager", "AddressRecord saved: $record")
+            
+            // 引数で address が渡されていない場合のみ取得を試みる
+            val finalAddress = if (address != null) {
+                address
+            } else if (lat != null && lng != null) {
+                getLocaleAddress(lat, lng)
             } else {
-                val record = AddressRecord(
-                    time = time,
-                    sectionId = sectionId,
-                    trackId = trackId,
-                    lat = lat,
-                    lng = lng,
-                    address = null
-                )
-                database.addressDao().insert(record)
-                Log.d("LocationManager", "AddressRecord saved (null location): $record")
+                null
             }
+
+            val record = AddressRecord(
+                time = time,
+                sectionId = sectionId,
+                trackId = trackId,
+                lat = lat,
+                lng = lng,
+                address = finalAddress
+            )
+            database.addressDao().insert(record)
+            Log.d("LocationManager", "AddressRecord saved: $record")
         }
     }
 }
