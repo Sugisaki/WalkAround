@@ -15,7 +15,7 @@ data class Settings(
     // 距離表示に使う単位 ("km" または "mile")
     val displayUnit: String,
 
-    // ダークモードの有効/無効
+    // ダークモードの有効/無効 (手動設定用)
     val isDarkMode: Boolean,
 
     // 通知機能の有効/無効
@@ -34,5 +34,9 @@ data class Settings(
 
     // システムのテーマ設定に従うかどうか
     @ColumnInfo(defaultValue = "1")
-    val followSystemTheme: Boolean = true
+    val followSystemTheme: Boolean = true,
+
+    // 音声による住所案内を有効にするかどうか
+    @ColumnInfo(defaultValue = "1")
+    val isVoiceEnabled: Boolean = true
 )

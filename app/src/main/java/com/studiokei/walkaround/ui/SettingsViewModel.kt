@@ -30,7 +30,8 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
                         volume = it.volume,
                         medianWindowSize = it.medianWindowSize,
                         locationAccuracyLimit = it.locationAccuracyLimit,
-                        followSystemTheme = it.followSystemTheme
+                        followSystemTheme = it.followSystemTheme,
+                        isVoiceEnabled = it.isVoiceEnabled
                     )
                 } ?: SettingsUiState() // 設定が見つからない場合はデフォルト値を使用
             }
@@ -54,6 +55,11 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
 
     fun updateFollowSystemTheme(follow: Boolean) {
         _uiState.value = _uiState.value.copy(followSystemTheme = follow)
+        saveSettings()
+    }
+
+    fun updateVoiceEnabled(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(isVoiceEnabled = enabled)
         saveSettings()
     }
 
@@ -93,7 +99,8 @@ class SettingsViewModel(private val database: AppDatabase) : ViewModel() {
                     volume = currentSettings.volume,
                     medianWindowSize = currentSettings.medianWindowSize,
                     locationAccuracyLimit = currentSettings.locationAccuracyLimit,
-                    followSystemTheme = currentSettings.followSystemTheme
+                    followSystemTheme = currentSettings.followSystemTheme,
+                    isVoiceEnabled = currentSettings.isVoiceEnabled
                 )
             )
         }
@@ -111,5 +118,6 @@ data class SettingsUiState(
     val volume: Float = 0.5f,
     val medianWindowSize: Int = 7,
     val locationAccuracyLimit: Float = 20.0f,
-    val followSystemTheme: Boolean = true
+    val followSystemTheme: Boolean = true,
+    val isVoiceEnabled: Boolean = true
 )

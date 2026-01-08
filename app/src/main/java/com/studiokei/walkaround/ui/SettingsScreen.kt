@@ -79,8 +79,141 @@ fun SettingsScreen(
             Text(text = "アプリ設定", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // デバッグモード時のみ表示する設定項目
+            // 1. 表示モード（テーマ）設定
+            SettingCard {
+                Column {
+                    // システム設定に従うスイッチ
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("システムのテーマ設定に従う:")
+                        Spacer(modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = uiState.followSystemTheme,
+                            onCheckedChange = { settingsViewModel.updateFollowSystemTheme(it) }
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 個別のダークモードスイッチ
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // システム設定に従う場合はグレーアウトして表示
+                        Text(
+                            text = "ダークモード:",
+                            color = if (uiState.followSystemTheme) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) 
+                                    else MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = uiState.isDarkMode,
+                            onCheckedChange = { settingsViewModel.updateDarkMode(it) },
+                            enabled = !uiState.followSystemTheme // システムに従う場合は無効化
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 2. 音声による案内設定
+            SettingCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("音声による住所案内を有効にする:")
+                    Spacer(modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = uiState.isVoiceEnabled,
+                        onCheckedChange = { settingsViewModel.updateVoiceEnabled(it) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 3. 音量設定（常時表示へ移動）
+            SettingCard {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("案内音量: ${"%.1f".format(uiState.volume)}")
+                    Slider(
+                        value = uiState.volume,
+                        onValueChange = { settingsViewModel.updateVolume(it) },
+                        valueRange = 0f..1f,
+                        steps = 9 // 0.0, 0.1, ..., 1.0
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 4. 位置情報の許容精度設定
+            SettingCard {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("位置情報の許容精度 (m): ${"%.1f".format(uiState.locationAccuracyLimit)}")
+                    Slider(
+                        value = uiState.locationAccuracyLimit,
+                        onValueChange = { settingsViewModel.updateLocationAccuracyLimit(it) },
+                        valueRange = 5f..100f,
+                        steps = 18 // 5.0, 10.0, ..., 100.0 (5m刻み)
+                    )
+                    Text(
+                        text = "この値より精度の低い（誤差が大きい）データは地図や住所取得に使用されません。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 5. 距離表示単位設定
+            SettingCard {
+                Column(modifier = Modifier.selectableGroup()) {
+                    Text("距離表示単位:")
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier
+                                .selectable(
+                                    selected = (uiState.displayUnit == "km"),
+                                    onClick = { settingsViewModel.updateDisplayUnit("km") },
+                                    role = Role.RadioButton
+                                )
+                                .weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = (uiState.displayUnit == "km"),
+                                onClick = null
+                            )
+                            Text(text = "km")
+                        }
+                        Row(
+                            Modifier
+                                .selectable(
+                                    selected = (uiState.displayUnit == "mile"),
+                                    onClick = { settingsViewModel.updateDisplayUnit("mile") },
+                                    role = Role.RadioButton
+                                )
+                                .weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = (uiState.displayUnit == "mile"),
+                                onClick = null
+                            )
+                            Text(text = "mile")
+                        }
+                    }
+                }
+            }
+
+            // 6. デバッグモード時のみ表示する設定項目（最下部へ移動）
             if (BuildConfig.DEBUG) {
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+                
                 Text(
                     text = "--- デバッグ設定 ---",
                     style = MaterialTheme.typography.labelLarge,
@@ -104,20 +237,6 @@ fun SettingsScreen(
                             },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(0.5f)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // 音量設定
-                SettingCard {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("音量: ${"%.1f".format(uiState.volume)}")
-                        Slider(
-                            value = uiState.volume,
-                            onValueChange = { settingsViewModel.updateVolume(it) },
-                            valueRange = 0f..1f,
-                            steps = 9 // 0.0, 0.1, ..., 1.0
                         )
                     }
                 }
@@ -176,109 +295,6 @@ fun SettingsScreen(
                             checked = uiState.isNotificationEnabled,
                             onCheckedChange = { settingsViewModel.updateNotificationEnabled(it) }
                         )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
-            }
-
-            // 表示モード（テーマ）設定
-            SettingCard {
-                Column {
-                    // システム設定に従うスイッチ
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("システムのテーマ設定に従う:")
-                        Spacer(modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = uiState.followSystemTheme,
-                            onCheckedChange = { settingsViewModel.updateFollowSystemTheme(it) }
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 個別のダークモードスイッチ
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // システム設定に従う場合はグレーアウトして表示
-                        Text(
-                            text = "ダークモード:",
-                            color = if (uiState.followSystemTheme) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f) 
-                                    else MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = uiState.isDarkMode,
-                            onCheckedChange = { settingsViewModel.updateDarkMode(it) },
-                            enabled = !uiState.followSystemTheme // システムに従う場合は無効化
-                        )
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 位置情報の許容精度設定
-            SettingCard {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("位置情報の許容精度 (m): ${"%.1f".format(uiState.locationAccuracyLimit)}")
-                    Slider(
-                        value = uiState.locationAccuracyLimit,
-                        onValueChange = { settingsViewModel.updateLocationAccuracyLimit(it) },
-                        valueRange = 5f..100f,
-                        steps = 18 // 5.0, 10.0, ..., 100.0 (5m刻み)
-                    )
-                    Text(
-                        text = "この値より精度の低い（誤差が大きい）データは地図や住所取得に使用されません。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 距離表示単位設定
-            SettingCard {
-                Column(modifier = Modifier.selectableGroup()) {
-                    Text("距離表示単位:")
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            Modifier
-                                .selectable(
-                                    selected = (uiState.displayUnit == "km"),
-                                    onClick = { settingsViewModel.updateDisplayUnit("km") },
-                                    role = Role.RadioButton
-                                )
-                                .weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = (uiState.displayUnit == "km"),
-                                onClick = null
-                            )
-                            Text(text = "km")
-                        }
-                        Row(
-                            Modifier
-                                .selectable(
-                                    selected = (uiState.displayUnit == "mile"),
-                                    onClick = { settingsViewModel.updateDisplayUnit("mile") },
-                                    role = Role.RadioButton
-                                )
-                                .weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = (uiState.displayUnit == "mile"),
-                                onClick = null
-                            )
-                            Text(text = "mile")
-                        }
                     }
                 }
             }

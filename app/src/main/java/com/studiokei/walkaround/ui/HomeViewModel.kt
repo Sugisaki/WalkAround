@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
+import android.speech.tts.TextToSpeech
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.studiokei.walkaround.data.database.AppDatabase
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.Locale
 
 /**
  * ホーム画面のUI状態を保持するデータクラス。
@@ -38,19 +40,19 @@ data class HomeUiState(
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
     val hasHealthConnectPermissions: Boolean = false,
     val sections: List<SectionSummary> = emptyList(),
-    val displayUnit: String = "km"
+    val displayUnit: String = "km",
+    val isVoiceEnabled: Boolean = true // 音声設定を追加
 )
 
 /**
  * ホーム画面の状態を管理するViewModel。
- * 住所の取得および共通ヘルパーを使用した音声読み上げ（TTS）の制御も行います。
  */
 class HomeViewModel(
     private val context: Context,
     private val database: AppDatabase,
     private val stepSensorManager: StepSensorManager,
     private val healthConnectManager: HealthConnectManager
-) : ViewModel() {
+) : ViewModel(), TextToSpeech.OnInitListener {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -59,7 +61,6 @@ class HomeViewModel(
     private var trackingService: TrackingService? = null
     private var isBound = false
 
-    // 共通の音声読み上げヘルパー
     private val ttsHelper = TextToSpeechHelper(context)
 
     private val connection = object : ServiceConnection {
@@ -96,7 +97,10 @@ class HomeViewModel(
 
             // 設定の監視
             database.settingsDao().getSettings().onEach { settings ->
-                _uiState.update { it.copy(displayUnit = settings?.displayUnit ?: "km") }
+                _uiState.update { it.copy(
+                    displayUnit = settings?.displayUnit ?: "km",
+                    isVoiceEnabled = settings?.isVoiceEnabled ?: true // 設定を反映
+                ) }
             }.launchIn(viewModelScope)
 
             // センサーモード等の初期確認
@@ -107,6 +111,17 @@ class HomeViewModel(
                     hasHealthConnectPermissions = hasPermissions
                 )
             }
+        }
+    }
+
+    override fun onInit(status: Int) {
+        // TextToSpeechHelperが内部で管理するため、ここでは特に行わない（またはインターフェースを削除）
+    }
+
+    private fun speakText(text: String) {
+        // 設定が有効な場合のみ読み上げる
+        if (_uiState.value.isVoiceEnabled) {
+            ttsHelper.speak(text)
         }
     }
 
@@ -170,7 +185,7 @@ class HomeViewModel(
                 } else {
                     val msg = "精度の高い位置情報がまだ記録されていません"
                     _uiState.update { it.copy(currentAddress = msg) }
-                    ttsHelper.speak(msg)
+                    speakText(msg)
                 }
             } else {
                 // 停止中: 現在の位置情報をリクエスト
@@ -187,11 +202,11 @@ class HomeViewModel(
                 } else if (location != null) {
                     val msg = "位置情報の精度が不十分です"
                     _uiState.update { it.copy(currentAddress = msg) }
-                    ttsHelper.speak(msg)
+                    speakText(msg)
                 } else {
                     val msg = "現在地を取得できませんでした"
                     _uiState.update { it.copy(currentAddress = msg) }
-                    ttsHelper.speak(msg)
+                    speakText(msg)
                 }
             }
         }
@@ -203,7 +218,6 @@ class HomeViewModel(
     private fun updateAddressStateAndSpeak(address: android.location.Address?) {
         if (address != null) {
             val tempRecord = AddressRecord(address = address)
-            
             val baseAddress = tempRecord.addressDisplay()
             val featureName = tempRecord.featureNameDisplay()
 
@@ -214,17 +228,17 @@ class HomeViewModel(
 
             // 読み上げ用：市区町村以下の簡潔な住所 + 名称 を使用
             val speakContent = tempRecord.cityDisplayWithFeature() ?: ""
-            ttsHelper.speak(speakContent)
+            speakText(speakContent)
         } else {
             val msg = "住所を取得できませんでした"
             _uiState.update { it.copy(currentAddress = msg) }
-            ttsHelper.speak(msg)
+            speakText(msg)
         }
     }
 
     fun dismissAddressDialog() {
         _uiState.update { it.copy(showAddressDialog = false) }
-        ttsHelper.stop() // ダイアログを閉じたら読み上げも止める
+        ttsHelper.stop()
     }
 
     fun onPermissionsResult(granted: Boolean) {

@@ -61,6 +61,7 @@ class TrackingService : Service() {
     private var lastThoroughfareKey: String? = null
     private var lastAddressProcessTime: Long = 0L
     private var accuracyLimit: Float = 20.0f
+    private var isVoiceEnabled: Boolean = true // 音声設定の保持用
 
     private val _currentSteps = MutableStateFlow(0)
     val currentSteps: StateFlow<Int> = _currentSteps.asStateFlow()
@@ -88,11 +89,12 @@ class TrackingService : Service() {
 
         createNotificationChannel()
 
-        // 設定から精度制限を取得して監視
+        // 設定から精度制限と音声有効フラグを取得して監視
         serviceScope.launch {
             database.settingsDao().getSettings().collect { settings ->
                 accuracyLimit = settings?.locationAccuracyLimit ?: 20.0f
-                Log.d("TrackingService", "Accuracy limit updated to: $accuracyLimit")
+                isVoiceEnabled = settings?.isVoiceEnabled ?: true
+                Log.d("TrackingService", "Settings updated: limit=$accuracyLimit, voice=$isVoiceEnabled")
             }
         }
     }
@@ -198,10 +200,15 @@ class TrackingService : Service() {
                             trackId = insertedId,
                             timestamp = currentTime
                         )
-                        // 計測開始時の住所を案内
-                        val speakText = AddressRecord(address = address).cityDisplayWithFeature()
-                        if (!speakText.isNullOrBlank()) {
-                            ttsHelper.speak("計測を開始しました。現在地は $speakText です。")
+                        // 計測開始時の案内（音声設定が有効な場合のみ）
+                        if (isVoiceEnabled) {
+                            val speakText = AddressRecord(address = address).cityDisplayWithFeature()
+                            val msg = if (!speakText.isNullOrBlank()) {
+                                "計測を開始しました。現在地は $speakText です。"
+                            } else {
+                                "計測を開始しました。"
+                            }
+                            ttsHelper.speak(msg)
                         }
                     }
                 } else if (currentTime - lastAddressProcessTime >= Constants.ADDRESS_PROCESS_INTERVAL_MS) {
@@ -217,11 +224,13 @@ class TrackingService : Service() {
                         )
                         if (newKey != null) {
                             lastThoroughfareKey = newKey
-                            // 丁目が変化した際に新しい住所を読み上げる
-                            val address = locationManager.getLocaleAddress(location.latitude, location.longitude)
-                            val speakText = AddressRecord(address = address).cityDisplayWithFeature()
-                            if (!speakText.isNullOrBlank()) {
-                                ttsHelper.speak(speakText)
+                            // 丁目が変化した際の読み上げ（音声設定が有効な場合のみ）
+                            if (isVoiceEnabled) {
+                                val address = locationManager.getLocaleAddress(location.latitude, location.longitude)
+                                val speakText = AddressRecord(address = address).cityDisplayWithFeature()
+                                if (!speakText.isNullOrBlank()) {
+                                    ttsHelper.speak(speakText)
+                                }
                             }
                         }
                         lastAddressProcessTime = System.currentTimeMillis()
@@ -295,8 +304,10 @@ class TrackingService : Service() {
                     database.sectionDao().updateSection(updatedSection)
                 }
                 
-                // 計測終了時の案内
-                ttsHelper.speak("計測を終了しました。お疲れ様でした。")
+                // 計測終了時の案内（音声設定が有効な場合のみ）
+                if (isVoiceEnabled) {
+                    ttsHelper.speak("計測を終了しました。お疲れ様でした。")
+                }
             }
             currentSessionId = null
             stopForeground(STOP_FOREGROUND_REMOVE)
