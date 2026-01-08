@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
@@ -34,6 +35,8 @@ data class HomeUiState(
     val currentStepCount: Int = 0,
     val currentTrackPointCount: Int = 0,
     val todayStepCount: Int = 0,
+    val todayHealthConnectSteps: Long? = null, // ヘルスコネクトから取得した本日の歩数
+    val isHealthConnectAvailable: Boolean = false, // ヘルスコネクトが利用可能か
     val currentAddress: String? = null,
     val currentFeatureName: String? = null,
     val showAddressDialog: Boolean = false,
@@ -41,7 +44,7 @@ data class HomeUiState(
     val hasHealthConnectPermissions: Boolean = false,
     val sections: List<SectionSummary> = emptyList(),
     val displayUnit: String = "km",
-    val isVoiceEnabled: Boolean = true // 音声設定を追加
+    val isVoiceEnabled: Boolean = true // 音声設定
 )
 
 /**
@@ -90,8 +93,8 @@ class HomeViewModel(
             }.launchIn(viewModelScope)
 
             // 本日の歩数の監視
-            val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            database.sectionDao().getTodayTotalSteps(startOfDay).onEach { count ->
+            val startOfDayMillis = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            database.sectionDao().getTodayTotalSteps(startOfDayMillis).onEach { count ->
                 _uiState.update { it.copy(todayStepCount = count ?: 0) }
             }.launchIn(viewModelScope)
 
@@ -99,17 +102,23 @@ class HomeViewModel(
             database.settingsDao().getSettings().onEach { settings ->
                 _uiState.update { it.copy(
                     displayUnit = settings?.displayUnit ?: "km",
-                    isVoiceEnabled = settings?.isVoiceEnabled ?: true // 設定を反映
+                    isVoiceEnabled = settings?.isVoiceEnabled ?: true
                 ) }
             }.launchIn(viewModelScope)
 
             // センサーモード等の初期確認
-            val hasPermissions = healthConnectManager.hasPermissions()
+            val isHCEnabled = healthConnectManager.isAvailable
+            val hasPermissions = if (isHCEnabled) healthConnectManager.hasPermissions() else false
             _uiState.update { 
                 it.copy(
                     sensorMode = stepSensorManager.sensorMode,
-                    hasHealthConnectPermissions = hasPermissions
+                    hasHealthConnectPermissions = hasPermissions,
+                    isHealthConnectAvailable = isHCEnabled
                 )
+            }
+            
+            if (hasPermissions) {
+                fetchHealthConnectSteps()
             }
         }
     }
@@ -131,6 +140,8 @@ class HomeViewModel(
                 _uiState.update { it.copy(isRunning = running) }
                 if (!running) {
                     _uiState.update { it.copy(currentAddress = null, currentFeatureName = null) }
+                    // 計測終了時にヘルスコネクトの歩数を再取得
+                    fetchHealthConnectSteps()
                 }
             }.launchIn(viewModelScope)
 
@@ -141,6 +152,26 @@ class HomeViewModel(
             service.currentTrackCount.onEach { count ->
                 _uiState.update { it.copy(currentTrackPointCount = count) }
             }.launchIn(viewModelScope)
+        }
+    }
+
+    /**
+     * ヘルスコネクトから本日の歩数を取得してUI状態を更新します。
+     */
+    private fun fetchHealthConnectSteps() {
+        viewModelScope.launch {
+            if (!healthConnectManager.isAvailable || !healthConnectManager.hasPermissions()) {
+                _uiState.update { it.copy(todayHealthConnectSteps = null) }
+                return@launch
+            }
+            val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+            val now = Instant.now()
+            try {
+                val steps = healthConnectManager.readSteps(startOfDay, now)
+                _uiState.update { it.copy(todayHealthConnectSteps = steps) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(todayHealthConnectSteps = null) }
+            }
         }
     }
 
@@ -245,6 +276,9 @@ class HomeViewModel(
         viewModelScope.launch {
             val hasPermissions = healthConnectManager.hasPermissions()
             _uiState.update { it.copy(hasHealthConnectPermissions = hasPermissions) }
+            if (hasPermissions) {
+                fetchHealthConnectSteps()
+            }
         }
     }
 
@@ -254,7 +288,6 @@ class HomeViewModel(
             context.unbindService(connection)
             isBound = false
         }
-        // ヘルパーのリソースを解放
         ttsHelper.shutdown()
     }
 }

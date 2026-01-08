@@ -6,11 +6,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import java.time.Instant
 
 class StepSensorManager(
@@ -33,8 +30,6 @@ class StepSensorManager(
 
     private var initialSteps = -1
     private var sessionSteps = 0
-    private var healthConnectInitialSteps = -1L
-    private var startTime: Instant = Instant.now()
 
     fun steps(): Flow<Int> = callbackFlow {
         val listener = object : SensorEventListener {
@@ -66,23 +61,9 @@ class StepSensorManager(
                 startDirectSensor(listener)
             }
             SensorMode.HEALTH_CONNECT -> {
-                // Polling for Health Connect
-                launch {
-                    startTime = Instant.now()
-                    healthConnectInitialSteps = healthConnectManager.readSteps(
-                        start = startTime.minusSeconds(60), // Look back a minute to get a baseline
-                        end = startTime
-                    )
-                    while (isActive) {
-                        val totalStepsNow = healthConnectManager.readSteps(
-                            start = startTime,
-                            end = Instant.now()
-                        )
-                        sessionSteps = totalStepsNow.toInt()
-                        trySend(sessionSteps)
-                        delay(5000) // Poll every 5 seconds
-                    }
-                }
+                // ヘルスコネクトの場合はリアルタイムでの増分取得が難しいため、
+                // 計測中は 0 を返し、停止時に期間内の合計を取得する運用とする。
+                trySend(0)
             }
             SensorMode.UNAVAILABLE -> { /* Do nothing */ }
         }

@@ -29,6 +29,7 @@ import com.studiokei.walkaround.util.TextToSpeechHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * 位置情報と歩数をバックグラウンドで計測し続けるフォアグラウンドサービス。
@@ -52,9 +56,10 @@ class TrackingService : Service() {
     private lateinit var stepSensorManager: StepSensorManager
     private lateinit var locationManager: LocationManager
     private lateinit var ttsHelper: TextToSpeechHelper
+    private lateinit var healthConnectManager: HealthConnectManager
 
     private var currentSessionId: Long? = null
-    private var startTime: Long = 0L
+    private var startTimeMillis: Long = 0L
     private var sensorJob: Job? = null
     private var locationJob: Job? = null
     private var addressCheckJob: Job? = null
@@ -68,8 +73,10 @@ class TrackingService : Service() {
 
     private var lastAccurateLocation: Location? = null
     private var lastAccurateTrackId: Long? = null
-    // 最後に「住所チェック（ジオコーディング呼び出し）」が正常に成功した地点
     private var lastProcessedLocation: Location? = null
+    
+    // ヘルスコネクト計測用
+    private var hcStartTotalSteps: Long = 0L
     
     private val addressCheckMutex = Mutex()
 
@@ -91,7 +98,7 @@ class TrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         database = AppDatabase.getDatabase(this)
-        val healthConnectManager = HealthConnectManager(this)
+        healthConnectManager = HealthConnectManager(this)
         stepSensorManager = StepSensorManager(this, healthConnectManager)
         locationManager = LocationManager(this)
         ttsHelper = TextToSpeechHelper(this)
@@ -127,9 +134,9 @@ class TrackingService : Service() {
         lastAccurateLocation = null
         lastAccurateTrackId = null
         lastProcessedLocation = null
-        startTime = System.currentTimeMillis()
+        startTimeMillis = System.currentTimeMillis()
+        hcStartTotalSteps = 0L
 
-        // 権限の状態を確認して、フォアグラウンドサービスのタイプを決定する
         val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         
@@ -165,9 +172,16 @@ class TrackingService : Service() {
         serviceScope.launch {
             val newSection = Section(
                 trackStartId = null,
-                createdAtTimestamp = startTime
+                createdAtTimestamp = startTimeMillis
             )
             currentSessionId = database.sectionDao().insertSection(newSection)
+            
+            // ヘルスコネクトモードの場合、開始時点の本日の累計歩数を記録
+            if (stepSensorManager.sensorMode == StepSensorManager.SensorMode.HEALTH_CONNECT) {
+                val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+                hcStartTotalSteps = healthConnectManager.readSteps(startOfDay, Instant.now())
+                Log.i("TrackingService", "【最新版】計測開始時のヘルスコネクト累計歩数: $hcStartTotalSteps")
+            }
         }
     }
 
@@ -175,7 +189,8 @@ class TrackingService : Service() {
         sensorJob?.cancel()
         sensorJob = stepSensorManager.steps().onEach { steps ->
             _currentSteps.value = steps
-            updateNotification("歩数: $steps, 位置情報: ${trackPointCounter}件")
+            val displaySteps = if (stepSensorManager.sensorMode == StepSensorManager.SensorMode.HEALTH_CONNECT) "---" else "$steps"
+            updateNotification("歩数: $displaySteps, 位置情報: ${trackPointCounter}件")
         }.launchIn(serviceScope)
     }
 
@@ -218,7 +233,8 @@ class TrackingService : Service() {
             
             trackPointCounter++
             _currentTrackCount.value = trackPointCounter
-            updateNotification("歩数: ${_currentSteps.value}, 位置情報: ${trackPointCounter}件")
+            val displaySteps = if (stepSensorManager.sensorMode == StepSensorManager.SensorMode.HEALTH_CONNECT) "---" else "${_currentSteps.value}"
+            updateNotification("歩数: $displaySteps, 位置情報: ${trackPointCounter}件")
 
             sessionId?.let { id ->
                 val currentSection = database.sectionDao().getSectionById(id)
@@ -312,53 +328,79 @@ class TrackingService : Service() {
         addressCheckJob?.cancel()
         _isRunning.value = false
 
+        // IDなどを確実に保持するためにローカル変数へコピー
         val sessionId = currentSessionId
-        val steps = _currentSteps.value
-        val startT = startTime
+        val initialSteps = _currentSteps.value
+        val startT = startTimeMillis
+        val endT = System.currentTimeMillis()
 
         serviceScope.launch {
-            val endTime = System.currentTimeMillis()
-            val currentSettings = database.settingsDao().getSettings().first()
-            val limit = currentSettings?.locationAccuracyLimit ?: 20.0f
-
-            val lastAccuratePoint = database.trackPointDao().getLastAccurateTrackPoint(limit)
-            val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
-            
-            if (sessionId != null) {
-                if (lastAccuratePoint != null) {
-                    locationManager.saveAddressRecord(
-                        lat = lastAccuratePoint.latitude,
-                        lng = lastAccuratePoint.longitude,
-                        sectionId = sessionId,
-                        trackId = lastAccuratePoint.id,
-                        timestamp = lastAccuratePoint.time
-                    )
+            try {
+                // ヘルスコネクトモードの場合、開始時と終了時の「本日の総計」の差分を取る
+                var finalSteps = initialSteps
+                if (stepSensorManager.sensorMode == StepSensorManager.SensorMode.HEALTH_CONNECT) {
+                    try {
+                        val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
+                        // 反映遅延を考慮して終了時刻を少し未来にする
+                        val endInstant = Instant.ofEpochMilli(endT).plusSeconds(10)
+                        
+                        val hcEndTotalSteps = healthConnectManager.readSteps(startOfDay, endInstant)
+                        finalSteps = (hcEndTotalSteps - hcStartTotalSteps).toInt().coerceAtLeast(0)
+                        Log.i("TrackingService", "【最新版】終了時累計: $hcEndTotalSteps, 開始時累計: $hcStartTotalSteps, 増分: $finalSteps")
+                    } catch (e: Exception) {
+                        Log.e("TrackingService", "【最新版】ヘルスコネクトの歩数取得に失敗", e)
+                    }
                 }
 
-                val stepSegment = StepSegment(
-                    sectionId = sessionId,
-                    steps = steps,
-                    startTime = startT,
-                    endTime = endTime
-                )
-                database.stepSegmentDao().insertStepSegment(stepSegment)
+                val currentSettings = database.settingsDao().getSettings().first()
+                val limit = currentSettings?.locationAccuracyLimit ?: 20.0f
 
-                val section = database.sectionDao().getSectionById(sessionId)
-                section?.let {
-                    val updatedSection = it.copy(
-                        durationSeconds = (endTime - startT) / 1000,
-                        trackEndId = lastTrackPoint?.id
-                    )
-                    database.sectionDao().updateSection(updatedSection)
-                }
+                val lastAccuratePoint = database.trackPointDao().getLastAccurateTrackPoint(limit)
+                val lastTrackPoint = database.trackPointDao().getLastTrackPoint()
                 
-                if (isVoiceEnabled) {
-                    ttsHelper.speak("計測を終了しました。お疲れ様でした。")
+                if (sessionId != null) {
+                    if (lastAccuratePoint != null) {
+                        locationManager.saveAddressRecord(
+                            lat = lastAccuratePoint.latitude,
+                            lng = lastAccuratePoint.longitude,
+                            sectionId = sessionId,
+                            trackId = lastAccuratePoint.id,
+                            timestamp = lastAccuratePoint.time
+                        )
+                    }
+
+                    // 歩数セグメントを保存
+                    val stepSegment = StepSegment(
+                        sectionId = sessionId,
+                        steps = finalSteps,
+                        startTime = startT,
+                        endTime = endT
+                    )
+                    val insertedSegmentId = database.stepSegmentDao().insertStepSegment(stepSegment)
+                    Log.i("TrackingService", "【最新版】StepSegmentを保存: ID=$insertedSegmentId, steps=$finalSteps, sessionId=$sessionId")
+
+                    val section = database.sectionDao().getSectionById(sessionId)
+                    section?.let {
+                        val updatedSection = it.copy(
+                            durationSeconds = (endT - startT) / 1000,
+                            trackEndId = lastTrackPoint?.id
+                        )
+                        database.sectionDao().updateSection(updatedSection)
+                    }
+                    
+                    if (isVoiceEnabled) {
+                        ttsHelper.speak("計測を終了しました。お疲れ様でした。")
+                    }
+                } else {
+                    Log.e("TrackingService", "【最新版】sessionId が null のため保存をスキップ")
                 }
+            } catch (e: Exception) {
+                Log.e("TrackingService", "【最新版】停止処理中にエラー発生", e)
+            } finally {
+                currentSessionId = null
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
             }
-            currentSessionId = null
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
         }
     }
 
@@ -395,9 +437,8 @@ class TrackingService : Service() {
         if (::ttsHelper.isInitialized) {
             ttsHelper.shutdown()
         }
-        serviceScope.launch {
-            Job().cancel() 
-        }
+        // スコープ内の全ジョブをキャンセル
+        serviceScope.coroutineContext[Job]?.cancelChildren()
     }
 
     companion object {

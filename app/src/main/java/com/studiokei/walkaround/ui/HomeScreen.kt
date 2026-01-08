@@ -220,10 +220,12 @@ fun HomeScreen(
             }
 
             if (uiState.isRunning) {
-                Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
-                Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
-                
-                Spacer(modifier = Modifier.height(8.dp))
+                // ヘルスコネクトモード以外の場合のみ現在の歩数を表示
+                if (uiState.sensorMode != SensorMode.HEALTH_CONNECT) {
+                    Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
+                    Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 Text(text = "現在の位置情報の数", style = MaterialTheme.typography.titleMedium)
                 Text(text = "${uiState.currentTrackPointCount}", style = MaterialTheme.typography.displayLarge)
@@ -245,7 +247,31 @@ fun HomeScreen(
                 )
             } else {
                 Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
-                Text(text = "${uiState.todayStepCount}", style = MaterialTheme.typography.displayLarge)
+                
+                // ヘルスコネクトの値をメインに表示 (権限がある場合)
+                val displaySteps = if (uiState.isHealthConnectAvailable && uiState.hasHealthConnectPermissions) {
+                    uiState.todayHealthConnectSteps ?: uiState.todayStepCount.toLong()
+                } else {
+                    uiState.todayStepCount.toLong()
+                }
+                Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // ヘルスコネクトの状態表示（異常時のみメッセージを表示）
+                if (!uiState.isHealthConnectAvailable) {
+                    Text(
+                        text = "ヘルスコネクトはこのデバイスでは利用できません",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray
+                    )
+                } else if (!uiState.hasHealthConnectPermissions) {
+                    Text(
+                        text = "ヘルスコネクトに接続されていません",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
