@@ -2,14 +2,27 @@ package com.studiokei.walkaround.data.model
 
 import android.location.Address
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Ignore
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
  * 住所情報を保持するデータモデル。
  * データベース保存用と、表示用のロジックを兼ね備えています。
  */
-@Entity(tableName = "address_records")
+@Entity(
+    tableName = "address_records",
+    foreignKeys = [
+        ForeignKey(
+            entity = Section::class,
+            parentColumns = ["sectionId"],
+            childColumns = ["sectionId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["sectionId"])]
+)
 data class AddressRecord(
     // プライマリコンストラクタは Room が内部で使用する
     @PrimaryKey(autoGenerate = true)

@@ -31,4 +31,7 @@ interface TrackPointDao {
 
     @Query("SELECT * FROM tracks WHERE accuracy <= :accuracyLimit ORDER BY id DESC LIMIT 1")
     suspend fun getLastAccurateTrackPoint(accuracyLimit: Float): TrackPoint?
+
+    @Query("DELETE FROM tracks WHERE id BETWEEN :startId AND :endId")
+    suspend fun deleteByIdRange(startId: Long, endId: Long)
 }

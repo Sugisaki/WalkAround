@@ -13,13 +13,13 @@ import androidx.room.PrimaryKey
             entity = TrackPoint::class,
             parentColumns = ["id"],
             childColumns = ["trackStartId"],
-            onDelete = ForeignKey.RESTRICT // 参照されるTrackPointが削除されないようにする
+            onDelete = ForeignKey.SET_NULL
         ),
         ForeignKey(
             entity = TrackPoint::class,
             parentColumns = ["id"],
             childColumns = ["trackEndId"],
-            onDelete = ForeignKey.RESTRICT // 参照されるTrackPointが削除されないようにする
+            onDelete = ForeignKey.SET_NULL
         )
     ],
     indices = [

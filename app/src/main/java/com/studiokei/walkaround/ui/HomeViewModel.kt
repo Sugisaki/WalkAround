@@ -299,21 +299,35 @@ class HomeViewModel(
     }
 
     /**
-     * セクションの削除を確定し、完了ダイアログを表示します。
-     * TODO: ここで実際の削除処理を実装します。
+     * セクションの削除を確定し、関連データを削除した後、完了ダイアログを表示します。
      */
     fun confirmDeletion() {
-        // val sectionId = _uiState.value.sectionToDeleteId
-        // viewModelScope.launch {
-        //     sectionId?.let { database.sectionDao().deleteSection(it) }
-        // }
-        println("（ダミー）セクション ${_uiState.value.sectionToDeleteId} を削除しました。")
-        _uiState.update {
-            it.copy(
-                showDeleteConfirmDialog = false,
-                showDeleteDoneDialog = true,
-                sectionToDeleteId = null
-            )
+        val sectionId = _uiState.value.sectionToDeleteId ?: return
+
+        viewModelScope.launch {
+            // 1. 削除対象のセクション情報を取得
+            val section = database.sectionDao().getSectionById(sectionId)
+
+            if (section != null) {
+                // 2. 関連するTrackPointの範囲を取得し、削除する
+                val startId = section.trackStartId
+                val endId = section.trackEndId
+                if (startId != null && endId != null) {
+                    database.trackPointDao().deleteByIdRange(startId, endId)
+                }
+
+                // 3. セクションを削除する (ON DELETE CASCADEにより、関連データも削除される)
+                database.sectionDao().deleteSection(section)
+            }
+
+            // 4. UIの状態を更新して完了ダイアログを表示
+            _uiState.update {
+                it.copy(
+                    showDeleteConfirmDialog = false,
+                    showDeleteDoneDialog = true,
+                    sectionToDeleteId = null
+                )
+            }
         }
     }
 

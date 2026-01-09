@@ -373,6 +373,13 @@ fun HomeScreen(
 
     // 削除完了ダイアログ
     if (uiState.showDeleteDoneDialog) {
+        LaunchedEffect(uiState.showDeleteDoneDialog) {
+            if (uiState.showDeleteDoneDialog) {
+                kotlinx.coroutines.delay(1000)
+                homeViewModel.dismissDeleteDoneDialog()
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { homeViewModel.dismissDeleteDoneDialog() },
             title = { Text("削除完了") },
