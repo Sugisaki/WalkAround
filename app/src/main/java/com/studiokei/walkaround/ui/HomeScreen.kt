@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,6 +43,30 @@ import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.ui.StepSensorManager.SensorMode
 import com.studiokei.walkaround.util.DateTimeFormatUtils
 import java.time.Instant
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import com.studiokei.walkaround.data.model.SectionSummary
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
 
 /**
  * ホーム画面。
@@ -310,89 +335,245 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(uiState.sections) { summary ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onSectionClick(summary.sectionId) }
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // 日付表示を Route 画面と共通のフォーマットに変更
-                                        Text(
-                                            text = DateTimeFormatUtils.headerDateFormatter.format(Instant.ofEpochMilli(summary.startTimeMillis)),
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = "Track: ${summary.trackPointCount}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = "Sec: ${summary.sectionId}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
-                                        }
-                                    }
-                                    
-                                    val startCity = summary.startCityDisplay()
-                                    val destCity = summary.destinationCityDisplay()
-                                    
-                                    if (destCity != null) {
-                                        Text(
-                                            text = "🔴 $destCity",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    if (startCity != null) {
-                                        Text(
-                                            text = "⬆️ $startCity",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(4.dp))
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // 距離を左側に表示
-                                        if (summary.distanceMeters != null) {
-                                            val meters = summary.distanceMeters
-                                            val distanceDisplay = if (uiState.displayUnit == "mile") {
-                                                val miles = meters / 1609.34
-                                                "距離: %.2f mile".format(miles)
-                                            } else {
-                                                "距離: %.2f km".format(meters / 1000.0)
-                                            }
-                                            Text(text = distanceDisplay, style = MaterialTheme.typography.bodyMedium)
-                                        } else {
-                                            Text(text = "距離: ---", style = MaterialTheme.typography.bodyMedium)
-                                        }
-                                        // 歩数を右側に表示
-                                        Text(
-                                            text = "歩数: ${summary.steps}",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            textAlign = TextAlign.End
-                                        )
-                                    }
-                                }
-                            }
+                        items(uiState.sections, key = { it.sectionId }) { summary ->
+                            SwipeableSectionCard(
+                                sectionSummary = summary,
+                                displayUnit = uiState.displayUnit,
+                                onDelete = { homeViewModel.requestDeletion(summary.sectionId) },
+                                onClick = { onSectionClick(summary.sectionId) }
+                            )
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // 削除確認ダイアログ
+    if (uiState.showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { homeViewModel.cancelDeletion() },
+            title = { Text("セクションの削除") },
+            text = { Text("このセクションを削除しますか？\nこの操作は元に戻せません。") },
+            confirmButton = {
+                TextButton(
+                    onClick = { homeViewModel.confirmDeletion() },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                ) {
+                    Text("削除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { homeViewModel.cancelDeletion() }) {
+                    Text("キャンセル")
+                }
+            }
+        )
+    }
+
+    // 削除完了ダイアログ
+    if (uiState.showDeleteDoneDialog) {
+        AlertDialog(
+            onDismissRequest = { homeViewModel.dismissDeleteDoneDialog() },
+            title = { Text("削除完了") },
+            text = { Text("セクションを削除しました。") },
+            confirmButton = {
+                TextButton(onClick = { homeViewModel.dismissDeleteDoneDialog() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * 横スワイプで削除ボタンを表示できるセクションカード。
+ *
+ * @param sectionSummary 表示するセクションの概要データ。
+ * @param displayUnit 距離の表示単位 ("km" または "mile")。
+ * @param onDelete 削除ボタンがクリックされたときのコールバック。
+ * @param onClick カード本体がクリックされたときのコールバック。
+ */
+@Composable
+private fun SwipeableSectionCard(
+    sectionSummary: SectionSummary,
+    displayUnit: String,
+    onDelete: () -> Unit,
+    onClick: () -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val offsetX = remember { Animatable(0f) }
+    val deleteButtonWidth = 80.dp // 削除ボタンの幅
+    val cardShape = CardDefaults.shape // カードのデフォルトの角丸を取得
+    val density = LocalDensity.current // LocalDensityを取得
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Red, shape = cardShape) // 背景を角丸で描画
+    ) {
+        // 背景の削除ボタン
+        IconButton(
+            onClick = {
+                // スワイプをリセットしてから削除処理を呼ぶ
+                coroutineScope.launch {
+                    offsetX.animateTo(0f)
+                    onDelete()
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(deleteButtonWidth)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "削除",
+                tint = Color.White
+            )
+        }
+
+        // 前景のカード
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            coroutineScope.launch {
+                                // ドラッグ量を現在のオフセットに加算
+                                val newOffset = with(density) {
+                                    (offsetX.value + dragAmount).coerceIn(
+                                        -deleteButtonWidth.toPx() * 1.2f,
+                                        0f
+                                    )
+                                }
+                                offsetX.snapTo(newOffset)
+                            }
+                        },
+                        onDragEnd = {
+                            coroutineScope.launch {
+                                // ドラッグ終了時のオフセットがボタン幅の半分以上なら、ボタンを表示した位置で固定
+                                val threshold = with(density) { -deleteButtonWidth.toPx() / 2 }
+                                if (offsetX.value < threshold) {
+                                    with(density) { offsetX.animateTo(-deleteButtonWidth.toPx()) }
+                                } else {
+                                    offsetX.animateTo(0f)
+                                }
+                            }
+                        }
+                    )
+                }
+                .clickable {
+                    // カードがスワイプされていない場合のみクリックを処理
+                    if (offsetX.value == 0f) {
+                        onClick()
+                    }
+                    else {
+                        // スワイプされている場合は元の位置に戻す
+                        coroutineScope.launch {
+                            offsetX.animateTo(0f)
+                        }
+                    }
+                }
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // ここに元のCardの内容をコピー
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = DateTimeFormatUtils.headerDateFormatter.format(Instant.ofEpochMilli(sectionSummary.startTimeMillis)),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Track: ${sectionSummary.trackPointCount}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Sec: ${sectionSummary.sectionId}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            // アイコンの分のスペースを確保
+                            Spacer(modifier = Modifier.width(40.dp))
+                        }
+                    }
+
+                    val startCity = sectionSummary.startCityDisplay()
+                    val destCity = sectionSummary.destinationCityDisplay()
+
+                    if (destCity != null) {
+                        Text(
+                            text = "🔴 $destCity",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (startCity != null) {
+                        Text(
+                            text = "⬆️ $startCity",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (sectionSummary.distanceMeters != null) {
+                            val meters = sectionSummary.distanceMeters
+                            val distanceDisplay = if (displayUnit == "mile") {
+                                val miles = meters / 1609.34
+                                "距離: %.2f mile".format(miles)
+                            } else {
+                                "距離: %.2f km".format(meters / 1000.0)
+                            }
+                            Text(text = distanceDisplay, style = MaterialTheme.typography.bodyMedium)
+                        } else {
+                            Text(text = "距離: ---", style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Text(
+                            text = "歩数: ${sectionSummary.steps}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.End
+                        )
+                    }
+                }
+                // アクションを開くためのインジケーターボタン
+                IconButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            with(density) { offsetX.animateTo(-deleteButtonWidth.toPx()) }
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.TopEnd)
+                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                        contentDescription = "アクションを表示",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                        modifier = Modifier
+                                            .border(
+                                                width = 1.dp,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                shape = CircleShape
+                                            )
+                                            .padding(4.dp) // ボーダーの内側に少しパディングを追加
+                                    )                }
             }
         }
     }

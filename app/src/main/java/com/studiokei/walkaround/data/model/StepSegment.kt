@@ -2,6 +2,7 @@ package com.studiokei.walkaround.data.model
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
@@ -14,7 +15,8 @@ import androidx.room.PrimaryKey
             childColumns = ["sectionId"],
             onDelete = ForeignKey.CASCADE // Sectionが削除されたら関連するStepIntervalも削除
         )
-    ]
+    ],
+    indices = [Index(value = ["sectionId"])]
 )
 data class StepSegment(
     // インターバルのユニークID

@@ -44,7 +44,10 @@ data class HomeUiState(
     val hasHealthConnectPermissions: Boolean = false,
     val sections: List<SectionSummary> = emptyList(),
     val displayUnit: String = "km",
-    val isVoiceEnabled: Boolean = true // 音声設定
+    val isVoiceEnabled: Boolean = true, // 音声設定
+    val showDeleteConfirmDialog: Boolean = false, // 削除確認ダイアログの表示状態
+    val showDeleteDoneDialog: Boolean = false, // 削除完了ダイアログの表示状態
+    val sectionToDeleteId: Long? = null // 削除対象のセクションID
 )
 
 /**
@@ -279,6 +282,59 @@ class HomeViewModel(
             if (hasPermissions) {
                 fetchHealthConnectSteps()
             }
+        }
+    }
+
+    /**
+     * 指定されたセクションの削除を要求し、確認ダイアログを表示します。
+     * @param sectionId 削除するセクションのID。
+     */
+    fun requestDeletion(sectionId: Long) {
+        _uiState.update {
+            it.copy(
+                showDeleteConfirmDialog = true,
+                sectionToDeleteId = sectionId
+            )
+        }
+    }
+
+    /**
+     * セクションの削除を確定し、完了ダイアログを表示します。
+     * TODO: ここで実際の削除処理を実装します。
+     */
+    fun confirmDeletion() {
+        // val sectionId = _uiState.value.sectionToDeleteId
+        // viewModelScope.launch {
+        //     sectionId?.let { database.sectionDao().deleteSection(it) }
+        // }
+        println("（ダミー）セクション ${_uiState.value.sectionToDeleteId} を削除しました。")
+        _uiState.update {
+            it.copy(
+                showDeleteConfirmDialog = false,
+                showDeleteDoneDialog = true,
+                sectionToDeleteId = null
+            )
+        }
+    }
+
+    /**
+     * セクションの削除をキャンセルし、確認ダイアログを閉じます。
+     */
+    fun cancelDeletion() {
+        _uiState.update {
+            it.copy(
+                showDeleteConfirmDialog = false,
+                sectionToDeleteId = null
+            )
+        }
+    }
+
+    /**
+     * 削除完了ダイアログを閉じます。
+     */
+    fun dismissDeleteDoneDialog() {
+        _uiState.update {
+            it.copy(showDeleteDoneDialog = false)
         }
     }
 
