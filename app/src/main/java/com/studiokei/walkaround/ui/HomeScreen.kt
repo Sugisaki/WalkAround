@@ -48,6 +48,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
@@ -56,7 +57,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.remember
@@ -227,122 +227,144 @@ fun HomeScreen(
     }
 
     Scaffold(modifier = modifier) { innerPadding ->
-        Column(
+        // ルートを LazyColumn に変更し、画面全体をスクロール可能にする
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
+                .padding(innerPadding),
+            contentPadding = PaddingValues(16.dp), // 全体にパディングを適用
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // エラー表示
             if (uiState.sensorMode == SensorMode.UNAVAILABLE) {
-                Text(
-                    text = "歩数計センサーまたはヘルスコネクトがこのデバイスでは利用できません。",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.Red,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            if (uiState.isRunning) {
-                // ヘルスコネクトモード以外の場合のみ現在の歩数を表示
-                if (uiState.sensorMode != SensorMode.HEALTH_CONNECT) {
-                    Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
-                    Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                Text(text = "現在の位置情報の数", style = MaterialTheme.typography.titleMedium)
-                Text(text = "${uiState.currentTrackPointCount}", style = MaterialTheme.typography.displayLarge)
-
-                val sensorText = when (uiState.sensorMode) {
-                    SensorMode.COUNTER -> "取得方法: 歩数カウンター (ハードウェア)"
-                    SensorMode.DETECTOR -> "取得方法: 歩数検出器 (ハードウェア)"
-                    SensorMode.HEALTH_CONNECT -> {
-                        if (uiState.hasHealthConnectPermissions) "取得方法: ヘルスコネクト"
-                        else "取得方法: ヘルスコネクト (権限不足)"
+                item {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "歩数計センサーまたはヘルスコネクトがこのデバイスでは利用できません。",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.Red,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
-                    SensorMode.UNAVAILABLE -> "取得方法: 利用不可"
-                }
-                Text(
-                    text = sensorText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            } else {
-                Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
-                
-                // ヘルスコネクトの値をメインに表示 (権限がある場合)
-                val displaySteps = if (uiState.isHealthConnectAvailable && uiState.hasHealthConnectPermissions) {
-                    uiState.todayHealthConnectSteps ?: uiState.todayStepCount.toLong()
-                } else {
-                    uiState.todayStepCount.toLong()
-                }
-                Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // ヘルスコネクトの状態表示（異常時のみメッセージを表示）
-                if (!uiState.isHealthConnectAvailable) {
-                    Text(
-                        text = "ヘルスコネクトはこのデバイスでは利用できません",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
-                    )
-                } else if (!uiState.hasHealthConnectPermissions) {
-                    Text(
-                        text = "ヘルスコネクトに接続されていません",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.Gray
-                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // 歩数や位置情報の表示
+            item {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (uiState.isRunning) {
+                        // ヘルスコネクトモード以外の場合のみ現在の歩数を表示
+                        if (uiState.sensorMode != SensorMode.HEALTH_CONNECT) {
+                            Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
+                            Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
 
-            // 住所表示ボタン
-            Button(onClick = { handleFetchAddressClick() }) {
-                Text("住所を表示")
-            }
+                        Text(text = "現在の位置情報の数", style = MaterialTheme.typography.titleMedium)
+                        Text(text = "${uiState.currentTrackPointCount}", style = MaterialTheme.typography.displayLarge)
 
-            Spacer(modifier = Modifier.height(24.dp))
+                        val sensorText = when (uiState.sensorMode) {
+                            SensorMode.COUNTER -> "取得方法: 歩数カウンター (ハードウェア)"
+                            SensorMode.DETECTOR -> "取得方法: 歩数検出器 (ハードウェア)"
+                            SensorMode.HEALTH_CONNECT -> {
+                                if (uiState.hasHealthConnectPermissions) "取得方法: ヘルスコネクト"
+                                else "取得方法: ヘルスコネクト (権限不足)"
+                            }
+                            SensorMode.UNAVAILABLE -> "取得方法: 利用不可"
+                        }
+                        Text(
+                            text = sensorText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    } else {
+                        Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
 
-            if (uiState.isRunning) {
-                Button(onClick = { homeViewModel.stopTracking() }) {
-                    Text("ストップ")
-                }
-            } else {
-                Button(onClick = { handleStartClick() }) {
-                    Text("スタート")
-                }
-            }
+                        // ヘルスコネクトの値をメインに表示 (権限がある場合)
+                        val displaySteps = if (uiState.isHealthConnectAvailable && uiState.hasHealthConnectPermissions) {
+                            uiState.todayHealthConnectSteps ?: uiState.todayStepCount.toLong()
+                        } else {
+                            uiState.todayStepCount.toLong()
+                        }
+                        Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
 
-            if (!uiState.isRunning) {
-                Spacer(modifier = Modifier.height(32.dp))
-                HorizontalDivider()
-                Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                if (uiState.sections.isNotEmpty()) {
-                    Text(
-                        text = "走行セクション",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Start
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(uiState.sections, key = { it.sectionId }) { summary ->
-                            SwipeableSectionCard(
-                                sectionSummary = summary,
-                                displayUnit = uiState.displayUnit,
-                                onDelete = { homeViewModel.requestDeletion(summary.sectionId) },
-                                onClick = { onSectionClick(summary.sectionId) }
+                        // ヘルスコネクトの状態表示（異常時のみメッセージを表示）
+                        if (!uiState.isHealthConnectAvailable) {
+                            Text(
+                                text = "ヘルスコネクトはこのデバイスでは利用できません",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
+                        } else if (!uiState.hasHealthConnectPermissions) {
+                            Text(
+                                text = "ヘルスコネクトに接続されていません",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
                             )
                         }
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // 住所表示ボタン
+            item {
+                Button(onClick = { handleFetchAddressClick() }) {
+                    Text("住所を表示")
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // スタート／ストップボタン
+            item {
+                if (uiState.isRunning) {
+                    Button(onClick = { homeViewModel.stopTracking() }) {
+                        Text("ストップ")
+                    }
+                } else {
+                    Button(onClick = { handleStartClick() }) {
+                        Text("スタート")
+                    }
+                }
+            }
+
+            // 走行セクション
+            if (!uiState.isRunning) {
+                item {
+                    Spacer(modifier = Modifier.height(32.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                if (uiState.sections.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "走行セクション",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    // ネストした LazyColumn の代わりに、ここで直接 items を使用
+                    items(uiState.sections, key = { it.sectionId }) { summary ->
+                        SwipeableSectionCard(
+                            sectionSummary = summary,
+                            displayUnit = uiState.displayUnit,
+                            onDelete = { homeViewModel.requestDeletion(summary.sectionId) },
+                            onClick = { onSectionClick(summary.sectionId) }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
