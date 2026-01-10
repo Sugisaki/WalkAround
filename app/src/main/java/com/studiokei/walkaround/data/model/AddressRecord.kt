@@ -67,7 +67,7 @@ data class AddressRecord(
             val fName = addr.featureName
             // 数字、記号、空白以外の文字（漢字、かな、カナ、アルファベットなど）が含まれているかチェック
             // 全角・半角の数字および記号のみの文字列は除外する
-            val filterRegex = Regex("[^0-9０-９\\p{Punct}\\p{IsPunctuation}\\s　]")
+            val filterRegex = Regex("[^0-9０-９\\p{Punct}\\s　]")
             if (fName != null && fName.contains(filterRegex)) fName else null
         },
         addressLine = address?.getAddressLine(0),
