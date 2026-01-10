@@ -2,6 +2,7 @@ package com.studiokei.walkaround
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -68,9 +69,37 @@ class MainActivity : ComponentActivity() {
 @PreviewScreenSizes
 @Composable
 fun WalkaroundApp() {
-    var currentDestination by rememberSaveable { mutableStateOf(AppDestinations.HOME) }
+    // ナビゲーションの履歴を管理するバックスタック
+    var backStack by rememberSaveable { mutableStateOf(listOf(AppDestinations.HOME)) }
     // 選択されたセクションIDを保持（スクロールおよびハイライト制御に使用）
     var selectedSectionId by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    // 現在表示している画面
+    val currentDestination = backStack.last()
+
+    // 戻るボタンが押されたときの処理を定義
+    BackHandler(enabled = true) {
+        // バックスタックに前の画面があれば、1つ前に戻る
+        if (backStack.size > 1) {
+            backStack = backStack.dropLast(1)
+        }
+        // バックスタックが1つの場合は何もしない (アプリを終了しない)
+    }
+
+    // 画面階層を深くするナビゲーション（例：HOME -> ROUTE）
+    fun navigateTo(destination: AppDestinations) {
+        backStack = backStack + destination
+    }
+
+    // トップレベルの画面へのナビゲーション（ボトムメニューからの遷移など）
+    fun navigateToTopLevel(destination: AppDestinations) {
+        // バックスタックを新しい画面でリセット
+        backStack = listOf(destination)
+        // HOME画面に戻った場合は、選択中のセクションIDを解除
+        if (destination == AppDestinations.HOME) {
+            selectedSectionId = null
+        }
+    }
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -85,12 +114,8 @@ fun WalkaroundApp() {
                     label = { Text(it.label) },
                     selected = it == currentDestination,
                     onClick = { 
-                        currentDestination = it
-                        // ナビゲーションメニューで切り替えた際に、必要に応じて選択状態をクリア
-                        // 例：Homeに戻った時は選択を解除する
-                        if (it == AppDestinations.HOME) {
-                            selectedSectionId = null
-                        }
+                        // トップレベルの画面として遷移
+                        navigateToTopLevel(it)
                     }
                 )
             }
@@ -103,7 +128,8 @@ fun WalkaroundApp() {
                     onSectionClick = { sectionId ->
                         // Home画面でセクションがタップされたら、Route画面へ遷移しIDを保持
                         selectedSectionId = sectionId
-                        currentDestination = AppDestinations.ROUTE
+                        // 画面をスタックに追加
+                        navigateTo(AppDestinations.ROUTE)
                     }
                 )
                 AppDestinations.ROUTE -> RouteScreen(
@@ -116,7 +142,8 @@ fun WalkaroundApp() {
                     onSectionClick = { sectionId ->
                         // Route画面内でセクションがタップされたら、Map画面へ遷移
                         selectedSectionId = sectionId
-                        currentDestination = AppDestinations.MAP
+                        // 画面をスタックに追加
+                        navigateTo(AppDestinations.MAP)
                     }
                 )
                 AppDestinations.MAP -> MapScreen(
