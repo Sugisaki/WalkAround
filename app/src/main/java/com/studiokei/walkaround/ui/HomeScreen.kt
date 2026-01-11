@@ -253,6 +253,20 @@ fun HomeScreen(
         )
     }
 
+    // --- 走行中にGPSがオフになった場合に表示するダイアログ ---
+    if (uiState.showGpsLostDialog) {
+        AlertDialog(
+            onDismissRequest = { homeViewModel.dismissGpsLostDialog() },
+            title = { Text("記録を停止しました") },
+            text = { Text("GPSがオフになったため、記録を自動的に停止しました。") },
+            confirmButton = {
+                TextButton(onClick = { homeViewModel.dismissGpsLostDialog() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
     // 住所表示用ダイアログの修正
     if (uiState.showAddressDialog) {
         AlertDialog(
@@ -353,11 +367,8 @@ fun HomeScreen(
 
                         // ヘルスコネクトの状態表示（異常時のみメッセージを表示）
                         if (!uiState.isHealthConnectAvailable) {
-                            Text(
-                                text = "ヘルスコネクトはこのデバイスでは利用できません",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Gray
-                            )
+                            // ヘルスコネクトはこのデバイスでは利用できません
+                            // 何も表示しない
                         } else if (!uiState.hasHealthConnectPermissions) {
                             Text(
                                 text = "ヘルスコネクトに接続されていません",

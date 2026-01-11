@@ -1,13 +1,21 @@
 package com.studiokei.walkaround.ui
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
+import android.location.LocationManager
+import android.os.Build
 import android.os.IBinder
 import android.speech.tts.TextToSpeech
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.studiokei.walkaround.R
 import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.data.model.AddressRecord
 import com.studiokei.walkaround.data.model.SectionSummary
@@ -25,7 +33,6 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.Locale
 
 /**
  * ホーム画面のUI状態を保持するデータクラス。
@@ -47,7 +54,8 @@ data class HomeUiState(
     val isVoiceEnabled: Boolean = true, // 音声設定
     val showDeleteConfirmDialog: Boolean = false, // 削除確認ダイアログの表示状態
     val showDeleteDoneDialog: Boolean = false, // 削除完了ダイアログの表示状態
-    val sectionToDeleteId: Long? = null // 削除対象のセクションID
+    val sectionToDeleteId: Long? = null, // 削除対象のセクションID
+    val showGpsLostDialog: Boolean = false // GPSがオフになり停止した際のダイアログ表示
 )
 
 /**
@@ -68,6 +76,9 @@ class HomeViewModel(
     private var isBound = false
 
     private val ttsHelper = TextToSpeechHelper(context)
+
+    // GPSの状態を監視するBroadcastReceiver
+    private val gpsStatusReceiver = GpsStatusReceiver { onGpsDisabled() }
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
@@ -127,7 +138,7 @@ class HomeViewModel(
     }
 
     override fun onInit(status: Int) {
-        // TextToSpeechHelperが内部で管理するため、ここでは特に行わない（またはインターフェースを削除）
+        // TextToSpeechHelperが内部で管理するため、ここでは特に行わない
     }
 
     private fun speakText(text: String) {
@@ -183,6 +194,8 @@ class HomeViewModel(
             action = TrackingService.ACTION_START
         }
         context.startForegroundService(intent)
+        // GPS監視を開始
+        context.registerReceiver(gpsStatusReceiver, IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION))
     }
 
     fun stopTracking() {
@@ -190,11 +203,68 @@ class HomeViewModel(
             action = TrackingService.ACTION_STOP
         }
         context.startService(intent)
+        // GPS監視を停止
+        try {
+            context.unregisterReceiver(gpsStatusReceiver)
+        } catch (e: IllegalArgumentException) {
+            // レシーバーがすでに登録解除されている場合に発生するが、無視してよい
+        }
+    }
+
+    /**
+     * GpsStatusReceiverから呼び出され、GPSが無効になった際の処理を行う。
+     */
+    private fun onGpsDisabled() {
+        // トラッキングが実行中でない場合は何もしない
+        if (!_uiState.value.isRunning) return
+
+        // トラッキングを停止
+        stopTracking()
+
+        // UIに通知するためのダイアログ表示フラグを立てる
+        _uiState.update { it.copy(showGpsLostDialog = true) }
+
+        // ユーザーに状況を知らせるためのシステム通知を発行
+        showTrackingStoppedNotification()
     }
 
     /**
      * 現在地の住所を取得してダイアログを表示し、音声で読み上げます。
+     * GPSがオフになったらトラッキングが停止したことをユーザーに通知。
      */
+    private fun showTrackingStoppedNotification() {
+        val channelId = "gps_lost_notification_channel"
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Android 8.0以上では通知チャネルの登録が必要
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "GPSステータス通知",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "GPSがオフになった際のトラッキング停止を通知します"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_notification) // 通知アイコン（要追加）
+            .setContentTitle("記録を停止しました")
+            .setContentText("GPSがオフになったため、記録を自動的に停止しました。")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        // 一意のIDで通知を表示
+        notificationManager.notify(GPS_LOST_NOTIFICATION_ID, builder.build())
+    }
+
+    /**
+     * GPS喪失ダイアログを閉じる。
+     */
+    fun dismissGpsLostDialog() {
+        _uiState.update { it.copy(showGpsLostDialog = false) }
+    }
+
     fun fetchCurrentAddress() {
         _uiState.update { it.copy(
             currentAddress = "取得中...", 
@@ -358,6 +428,44 @@ class HomeViewModel(
             context.unbindService(connection)
             isBound = false
         }
+        // ViewModelが破棄される際に、登録したレシーバーを解除
+        try {
+            context.unregisterReceiver(gpsStatusReceiver)
+        } catch (e: IllegalArgumentException) {
+            // 無視
+        }
         ttsHelper.shutdown()
+    }
+
+    companion object {
+        private const val GPS_LOST_NOTIFICATION_ID = 2
+    }
+}
+
+/**
+ * GPSプロバイダーの状態変化を受け取るBroadcastReceiver。
+ * トラッキング中にGPSが無効になったことを検知するために使用します。
+ */
+private class GpsStatusReceiver(private val onGpsDisabled: () -> Unit) : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+        // GPSプロバイダーの状態変化アクションでなければ何もしない
+        if (intent?.action != LocationManager.PROVIDERS_CHANGED_ACTION) {
+            return
+        }
+
+        val locationManager = context?.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        // LocationManagerが取得でき、かつGPSが無効になっている場合
+        if (locationManager != null && !isGpsEnabled(locationManager)) {
+            // コールバックを呼び出してGPSが無効になったことを通知
+            onGpsDisabled()
+        }
+    }
+
+    /**
+     * GPSまたはネットワーク位置情報が有効かどうかを判定します。
+     */
+    private fun isGpsEnabled(locationManager: LocationManager): Boolean {
+        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     }
 }
