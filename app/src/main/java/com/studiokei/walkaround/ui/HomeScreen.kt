@@ -1,7 +1,11 @@
 package com.studiokei.walkaround.ui
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.location.LocationManager
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -27,6 +31,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -93,10 +100,20 @@ fun HomeScreen(
     )
     val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
+    // --- GPS無効時に表示するダイアログの状態管理 ---
+    var showGpsDisabledDialog by rememberSaveable { mutableStateOf(false) }
+
     // --- 権限リクエスト用ランチャー ---
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ -> }
+
+    // --- 位置情報設定画面を開くためのランチャー ---
+    val locationSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        // 設定画面から戻ってきたあとに、必要であればGPSの状態を再チェックするなどの処理をここに追加できる
+    }
 
     val healthConnectPermissionsLauncher = rememberLauncherForActivityResult(
         contract = healthConnectManager.requestPermissionsContract()
@@ -144,6 +161,14 @@ fun HomeScreen(
     }
 
     fun handleStartClick() {
+        // --- GPSが有効かチェック ---
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        if (!isGpsEnabled) {
+            showGpsDisabledDialog = true
+            return
+        }
+
         val fineLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val coarseLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val hasLocation = fineLocationGranted || coarseLocationGranted
@@ -182,6 +207,14 @@ fun HomeScreen(
 
     // 住所表示ボタン押下時の処理
     fun handleFetchAddressClick() {
+        // --- GPSが有効かチェック ---
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        if (!isGpsEnabled) {
+            showGpsDisabledDialog = true
+            return
+        }
+
         val fineLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         val coarseLocationGranted = context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         
@@ -192,6 +225,32 @@ fun HomeScreen(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
             )
         }
+    }
+
+    // --- GPS無効時に表示するダイアログ ---
+    if (showGpsDisabledDialog) {
+        AlertDialog(
+            onDismissRequest = { showGpsDisabledDialog = false },
+            title = { Text("位置情報が無効です") },
+            text = { Text("位置情報を利用するには、端末の設定で位置情報サービスを有効にしてください。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showGpsDisabledDialog = false
+                        // 位置情報設定画面を開くインテントを作成してランチャーを起動
+                        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                        locationSettingsLauncher.launch(intent)
+                    }
+                ) {
+                    Text("設定を開く")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGpsDisabledDialog = false }) {
+                    Text("キャンセル")
+                }
+            }
+        )
     }
 
     // 住所表示用ダイアログの修正
@@ -294,8 +353,11 @@ fun HomeScreen(
 
                         // ヘルスコネクトの状態表示（異常時のみメッセージを表示）
                         if (!uiState.isHealthConnectAvailable) {
-                            // ヘルスコネクトはこのデバイスでは利用できません
-                            // 何も表示しない
+                            Text(
+                                text = "ヘルスコネクトはこのデバイスでは利用できません",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Gray
+                            )
                         } else if (!uiState.hasHealthConnectPermissions) {
                             Text(
                                 text = "ヘルスコネクトに接続されていません",
