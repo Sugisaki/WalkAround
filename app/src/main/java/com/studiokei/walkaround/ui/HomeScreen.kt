@@ -294,11 +294,8 @@ fun HomeScreen(
 
                         // ヘルスコネクトの状態表示（異常時のみメッセージを表示）
                         if (!uiState.isHealthConnectAvailable) {
-                            Text(
-                                text = "ヘルスコネクトはこのデバイスでは利用できません",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Gray
-                            )
+                            // ヘルスコネクトはこのデバイスでは利用できません
+                            // 何も表示しない
                         } else if (!uiState.hasHealthConnectPermissions) {
                             Text(
                                 text = "ヘルスコネクトに接続されていません",
