@@ -5,7 +5,12 @@
     <!-- ヘルスコネクト用の権限 -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
 
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" tools:targetApi="q" />
+    <!-- 各種センサーは必須ではないことを宣言 -->
+    <uses-feature android:name="android.hardware.sensor.activity_recognition" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
+
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" android:required="false" tools:targetApi="q" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
