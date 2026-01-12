@@ -11,6 +11,7 @@
 /.idea/assetWizardSettings.xml
 /.kotlin
 /build
+/app/release
 /app/build
 /captures
 .externalNativeBuild
