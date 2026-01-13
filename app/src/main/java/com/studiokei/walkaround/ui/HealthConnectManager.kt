@@ -15,8 +15,11 @@ import java.time.Instant
 class HealthConnectManager(private val context: Context) {
     private var healthConnectClient: HealthConnectClient? = null
 
+    // Google Playのポリシーに対応するため、一時的にヘルスコネクトを無効化します。
+    // isAvailableが常にfalseを返すようにすることで、ヘルスコネクト関連の機能が呼び出されなくなります。
+    // 後で機能を復活させる際は、この部分を元のコードに戻してください。
     val isAvailable: Boolean
-        get() = HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
+        get() = false // HealthConnectClient.getSdkStatus(context) == HealthConnectClient.SDK_AVAILABLE
 
     init {
         if (isAvailable) {
