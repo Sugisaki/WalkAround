@@ -42,8 +42,8 @@ data class HomeUiState(
     val currentStepCount: Int = 0,
     val currentTrackPointCount: Int = 0,
     val todayStepCount: Int = 0,
-    val todayHealthConnectSteps: Long? = null, // ヘルスコネクトから取得した本日の歩数
-    val isHealthConnectAvailable: Boolean = false, // ヘルスコネクトが利用可能か
+    val todayHealthConnectSteps: Long? = null,
+    val isHealthConnectAvailable: Boolean = false,
     val currentAddress: String? = null,
     val currentFeatureName: String? = null,
     val showAddressDialog: Boolean = false,
@@ -51,11 +51,16 @@ data class HomeUiState(
     val hasHealthConnectPermissions: Boolean = false,
     val sections: List<SectionSummary> = emptyList(),
     val displayUnit: String = "km",
-    val isVoiceEnabled: Boolean = true, // 音声設定
-    val showDeleteConfirmDialog: Boolean = false, // 削除確認ダイアログの表示状態
-    val showDeleteDoneDialog: Boolean = false, // 削除完了ダイアログの表示状態
-    val sectionToDeleteId: Long? = null, // 削除対象のセクションID
-    val showGpsLostDialog: Boolean = false // GPSがオフになり停止した際のダイアログ表示
+    val isVoiceEnabled: Boolean = true,
+    val showDeleteConfirmDialog: Boolean = false,
+    val showDeleteDoneDialog: Boolean = false,
+    val sectionToDeleteId: Long? = null,
+    val showGpsLostDialog: Boolean = false,
+
+    // Fitness API (Recording API) 関連
+    val isFitnessApiAvailable: Boolean = false, // APIが利用可能か
+    val showStepsDialog: Boolean = false,       // 歩数履歴ダイアログの表示状態
+    val dailySteps: List<Pair<String, Long>> = emptyList() // 過去の歩数データ
 )
 
 /**
@@ -65,7 +70,8 @@ class HomeViewModel(
     private val context: Context,
     private val database: AppDatabase,
     private val stepSensorManager: StepSensorManager,
-    private val healthConnectManager: HealthConnectManager
+    private val healthConnectManager: HealthConnectManager,
+    private val fitnessHistoryManager: FitnessHistoryManager // FitnessHistoryManager を追加
 ) : ViewModel(), TextToSpeech.OnInitListener {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -123,16 +129,24 @@ class HomeViewModel(
             // センサーモード等の初期確認
             val isHCEnabled = healthConnectManager.isAvailable
             val hasPermissions = if (isHCEnabled) healthConnectManager.hasPermissions() else false
-            _uiState.update { 
+            _uiState.update {
                 it.copy(
                     sensorMode = stepSensorManager.sensorMode,
                     hasHealthConnectPermissions = hasPermissions,
                     isHealthConnectAvailable = isHCEnabled
                 )
             }
-            
             if (hasPermissions) {
                 fetchHealthConnectSteps()
+            }
+
+            // --- Fitness API関連の初期化処理を追加 ---
+            val isFitnessAvailable = fitnessHistoryManager.isGooglePlayServicesAvailable()
+            _uiState.update { it.copy(isFitnessApiAvailable = isFitnessAvailable) }
+
+            // Fitness APIが利用可能で、権限がある場合は歩数データの購読を開始
+            if (isFitnessAvailable && fitnessHistoryManager.hasActivityRecognitionPermission()) {
+                subscribeToFitnessData()
             }
         }
     }
@@ -185,6 +199,43 @@ class HomeViewModel(
                 _uiState.update { it.copy(todayHealthConnectSteps = steps) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(todayHealthConnectSteps = null) }
+            }
+        }
+    }
+
+    /**
+     * Fitness APIを使用して過去7日間の歩数を取得し、ダイアログを表示します。
+     */
+    fun fetchDailySteps() {
+        viewModelScope.launch {
+            // データを取得してUI状態を更新
+            val steps = fitnessHistoryManager.readDailySteps(7)
+            _uiState.update {
+                it.copy(
+                    dailySteps = steps,
+                    showStepsDialog = true
+                )
+            }
+        }
+    }
+
+    /**
+     * 歩数履歴ダイアログを閉じます。
+     */
+    fun dismissStepsDialog() {
+        _uiState.update { it.copy(showStepsDialog = false) }
+    }
+
+    /**
+     * Fitness APIのデータ収集を購読します。
+     * 権限がある場合のみ呼び出されます。
+     */
+    private fun subscribeToFitnessData() {
+        viewModelScope.launch {
+            try {
+                fitnessHistoryManager.subscribeToSteps()
+            } catch (e: Exception) {
+                // エラーはFitnessHistoryManager内でログ出力済み
             }
         }
     }
@@ -249,7 +300,7 @@ class HomeViewModel(
         }
 
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_notification) // 通知アイコン（要追加）
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("記録を停止しました")
             .setContentText("GPSがオフになったため、記録を自動的に停止しました。")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -267,9 +318,9 @@ class HomeViewModel(
 
     fun fetchCurrentAddress() {
         _uiState.update { it.copy(
-            currentAddress = "取得中...", 
+            currentAddress = "取得中...",
             currentFeatureName = null,
-            showAddressDialog = true 
+            showAddressDialog = true
         ) }
 
         viewModelScope.launch {
@@ -345,7 +396,10 @@ class HomeViewModel(
         ttsHelper.stop()
     }
 
-    fun onPermissionsResult(granted: Boolean) {
+    /**
+     * Health Connect の権限リクエスト結果を処理します。
+     */
+    fun onHealthConnectPermissionsResult(granted: Boolean) {
         viewModelScope.launch {
             val hasPermissions = healthConnectManager.hasPermissions()
             _uiState.update { it.copy(hasHealthConnectPermissions = hasPermissions) }
@@ -356,9 +410,16 @@ class HomeViewModel(
     }
 
     /**
-     * 指定されたセクションの削除を要求し、確認ダイアログを表示します。
-     * @param sectionId 削除するセクションのID。
+     * 身体活動の権限リクエスト結果を処理します。
      */
+    fun onActivityRecognitionPermissionResult(granted: Boolean) {
+        if (granted) {
+            // 権限が付与されたら、データ購読を開始
+            subscribeToFitnessData()
+        }
+        // UIの更新や、拒否された場合のエラー表示などはここに追加できる
+    }
+
     fun requestDeletion(sectionId: Long) {
         _uiState.update {
             it.copy(

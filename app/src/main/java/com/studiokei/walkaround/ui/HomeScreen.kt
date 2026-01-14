@@ -85,15 +85,18 @@ fun HomeScreen(
     onSectionClick: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val healthConnectManager = HealthConnectManager(context)
+    // --- ViewModelの初期化でFitnessHistoryManagerを渡すように変更 ---
     val homeViewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
+                val appDatabase = AppDatabase.getDatabase(context)
+                val healthConnectManager = HealthConnectManager(context)
                 HomeViewModel(
                     context.applicationContext,
-                    AppDatabase.getDatabase(context),
+                    appDatabase,
                     StepSensorManager(context, healthConnectManager),
-                    healthConnectManager
+                    healthConnectManager,
+                    FitnessHistoryManager(context) // FitnessHistoryManagerをインスタンス化
                 )
             }
         }
@@ -106,49 +109,45 @@ fun HomeScreen(
     // --- 権限リクエスト用ランチャー ---
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { _ -> }
+    ) { _ -> /* 通知権限の結果はここでは特にハンドリングしない */ }
 
     // --- 位置情報設定画面を開くためのランチャー ---
     val locationSettingsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        // 設定画面から戻ってきたあとに、必要であればGPSの状態を再チェックするなどの処理をここに追加できる
-    }
+    ) { /* 設定画面から戻ってきた際の処理は必要に応じて追加 */ }
 
+    // --- Health Connectの権限リクエスト用ランチャー ---
     val healthConnectPermissionsLauncher = rememberLauncherForActivityResult(
-        contract = healthConnectManager.requestPermissionsContract()
+        contract = HealthConnectManager(context).requestPermissionsContract()
     ) { grantedPermissions ->
-        homeViewModel.onPermissionsResult(grantedPermissions.values.all { it })
-        // ヘルスコネクトの確認が終わったら、結果に関わらず開始
-        homeViewModel.startTracking()
+        homeViewModel.onHealthConnectPermissionsResult(grantedPermissions.values.all { it })
     }
 
+    // --- 身体活動(Activity Recognition)の権限リクエスト用ランチャー ---
     val activityRecognitionPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        homeViewModel.onPermissionsResult(isGranted)
-        if (isGranted) {
-            // 身体活動の許可が得られたら開始（ヘルスコネクトは不要）
-            homeViewModel.startTracking()
+        // ViewModelに権限結果を通知
+        homeViewModel.onActivityRecognitionPermissionResult(isGranted)
+
+        // --- トラッキング開始ロジックを権限リクエストの後に移動 ---
+        if (uiState.sensorMode == SensorMode.HEALTH_CONNECT && !uiState.hasHealthConnectPermissions) {
+            // Health Connectが必要な場合は、その権限をリクエスト
+            healthConnectPermissionsLauncher.launch(arrayOf("androidx.health.connect.permission.read.STEPS"))
         } else {
-            // 身体活動の許可が得られなかった場合のみ、ヘルスコネクトが必要か確認
-            if (uiState.sensorMode == SensorMode.HEALTH_CONNECT && !uiState.hasHealthConnectPermissions) {
-                println("🟧🟧 身体活動拒否 -> ヘルスコネクト権限リクエストへ")
-                healthConnectPermissionsLauncher.launch(arrayOf("androidx.health.connect.permission.read.STEPS"))
-            } else {
-                // ヘルスコネクトが使えない場合、開始
-                homeViewModel.startTracking()
-            }
+            // それ以外の場合はトラッキングを開始
+            homeViewModel.startTracking()
         }
     }
 
+    // --- 位置情報の権限リクエスト用ランチャー ---
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions.getOrDefault(Manifest.permission.ACCESS_FINE_LOCATION, false) ||
             permissions.getOrDefault(Manifest.permission.ACCESS_COARSE_LOCATION, false)
         ) {
-            println("[Debug] 🟧🟧 位置情報許可後の開始")
+            // 位置情報が許可されたら、トラッキング開始処理を呼び出す
             homeViewModel.startTracking()
         }
     }
@@ -161,7 +160,7 @@ fun HomeScreen(
     }
 
     fun handleStartClick() {
-        // --- GPSが有効かチェック ---
+        // GPSが有効かチェック
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
         if (!isGpsEnabled) {
@@ -177,31 +176,27 @@ fun HomeScreen(
             context.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == android.content.pm.PackageManager.PERMISSION_GRANTED
         } else true
 
-        // 1. 位置情報が全くない場合はリクエスト（必要なら身体活動も混ぜる）
+        // 1. 位置情報がない場合
         if (!hasLocation) {
-            println("🟧🟧 1. 位置情報がないため権限リクエストへ")
             val permissions = mutableListOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION
             )
-            if (!activityRecognitionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && 
-                uiState.sensorMode != SensorMode.UNAVAILABLE) {
+            // 身体活動の権限も必要なら同時にリクエスト
+            if (!activityRecognitionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uiState.sensorMode != SensorMode.UNAVAILABLE) {
                 permissions.add(Manifest.permission.ACTIVITY_RECOGNITION)
             }
             locationPermissionLauncher.launch(permissions.toTypedArray())
             return
         }
 
-        // --- ここから「位置情報はある」状態 ---
-        // 2. 身体活動がない場合、リクエスト（ランチャー側で拒否時のみヘルスコネクトを確認する）
-        if (!activityRecognitionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-            uiState.sensorMode != SensorMode.UNAVAILABLE) {
-            println("🟧🟧 2. 身体活動権限リクエストへ")
+        // 2. 位置情報はあるが、身体活動の権限がない場合
+        if (!activityRecognitionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uiState.sensorMode != SensorMode.UNAVAILABLE) {
             activityRecognitionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
             return
         }
-
-        // 権限は揃っている（または身体活動の許可がある）ので、即座にトラッキングを開始！
+        
+        // 3. 必要な権限がすべて揃っている場合
         homeViewModel.startTracking()
     }
 
@@ -227,155 +222,83 @@ fun HomeScreen(
         }
     }
 
-    // --- GPS無効時に表示するダイアログ ---
+    // --- ダイアログ表示 ---
+    // GPS無効時ダイアログ
     if (showGpsDisabledDialog) {
-        AlertDialog(
-            onDismissRequest = { showGpsDisabledDialog = false },
-            title = { Text("位置情報が無効です") },
-            text = { Text("位置情報を利用するには、端末の設定で位置情報サービスを有効にしてください。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showGpsDisabledDialog = false
-                        // 位置情報設定画面を開くインテントを作成してランチャーを起動
-                        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-                        locationSettingsLauncher.launch(intent)
-                    }
-                ) {
-                    Text("設定を開く")
-                }
+        GpsDisabledDialog(
+            onConfirm = {
+                showGpsDisabledDialog = false
+                val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                locationSettingsLauncher.launch(intent)
             },
-            dismissButton = {
-                TextButton(onClick = { showGpsDisabledDialog = false }) {
-                    Text("キャンセル")
-                }
-            }
+            onDismiss = { showGpsDisabledDialog = false }
         )
     }
 
-    // --- 走行中にGPSがオフになった場合に表示するダイアログ ---
+    // GPSロスト（走行中停止）ダイアログ
     if (uiState.showGpsLostDialog) {
-        AlertDialog(
-            onDismissRequest = { homeViewModel.dismissGpsLostDialog() },
-            title = { Text("記録を停止しました") },
-            text = { Text("GPSがオフになったため、記録を自動的に停止しました。") },
-            confirmButton = {
-                TextButton(onClick = { homeViewModel.dismissGpsLostDialog() }) {
-                    Text("OK")
-                }
-            }
-        )
+        GpsLostDialog(onDismiss = { homeViewModel.dismissGpsLostDialog() })
     }
 
-    // 住所表示用ダイアログの修正
+    // 住所表示ダイアログ
     if (uiState.showAddressDialog) {
-        AlertDialog(
-            onDismissRequest = { homeViewModel.dismissAddressDialog() },
-            title = { Text("現在地の住所") },
-            text = { 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 1行目: 住所 (標準的なサイズ)
-                    Text(
-                        text = uiState.currentAddress ?: "住所を取得中...",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    
-                    // 2行目: 地点名称 (少し大きいサイズ・太字)
-                    if (!uiState.currentFeatureName.isNullOrBlank()) {
-                        Text(
-                            text = uiState.currentFeatureName!!,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { homeViewModel.dismissAddressDialog() }) {
-                    Text("OK")
-                }
-            }
+        AddressDialog(
+            address = uiState.currentAddress,
+            featureName = uiState.currentFeatureName,
+            onDismiss = { homeViewModel.dismissAddressDialog() }
+        )
+    }
+    
+    // --- 【新規追加】歩数履歴表示ダイアログ ---
+    if (uiState.showStepsDialog) {
+        DailyStepsDialog(
+            dailySteps = uiState.dailySteps,
+            onDismiss = { homeViewModel.dismissStepsDialog() }
         )
     }
 
     Scaffold(modifier = modifier) { innerPadding ->
-        // ルートを LazyColumn に変更し、画面全体をスクロール可能にする
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp), // 全体にパディングを適用
+            contentPadding = PaddingValues(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // エラー表示
             if (uiState.sensorMode == SensorMode.UNAVAILABLE) {
                 item {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "歩数計センサーまたはヘルスコネクトがこのデバイスでは利用できません。",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.Red,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
+                    Text(
+                        text = "歩数計センサーまたはヘルスコネクトがこのデバイスでは利用できません。",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.Red,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
                 }
             }
 
-            // 歩数や位置情報の表示
+            // 歩数・位置情報表示
             item {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (uiState.isRunning) {
-                        // ヘルスコネクトモード以外の場合のみ現在の歩数を表示
-                        if (uiState.sensorMode != SensorMode.HEALTH_CONNECT) {
-                            Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
-                            Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
+                CurrentStatusCard(uiState)
+            }
 
-                        Text(text = "現在の位置情報の数", style = MaterialTheme.typography.titleMedium)
-                        Text(text = "${uiState.currentTrackPointCount}", style = MaterialTheme.typography.displayLarge)
-
-                        val sensorText = when (uiState.sensorMode) {
-                            SensorMode.COUNTER -> "取得方法: 歩数カウンター (ハードウェア)"
-                            SensorMode.DETECTOR -> "取得方法: 歩数検出器 (ハードウェア)"
-                            SensorMode.HEALTH_CONNECT -> {
-                                if (uiState.hasHealthConnectPermissions) "取得方法: ヘルスコネクト"
-                                else "取得方法: ヘルスコネクト (権限不足)"
+            // --- 【新規追加】歩数記録確認ボタン ---
+            if (uiState.isFitnessApiAvailable) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            // 権限がない場合はリクエスト、ある場合はデータをフェッチ
+                            if (context.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                homeViewModel.fetchDailySteps()
+                            } else {
+                                activityRecognitionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
                             }
-                            SensorMode.UNAVAILABLE -> "取得方法: 利用不可"
-                        }
-                        Text(
-                            text = sensorText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    } else {
-                        Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
-
-                        // ヘルスコネクトの値をメインに表示 (権限がある場合)
-                        val displaySteps = if (uiState.isHealthConnectAvailable && uiState.hasHealthConnectPermissions) {
-                            uiState.todayHealthConnectSteps ?: uiState.todayStepCount.toLong()
-                        } else {
-                            uiState.todayStepCount.toLong()
-                        }
-                        Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // ヘルスコネクトの状態表示（異常時のみメッセージを表示）
-                        if (!uiState.isHealthConnectAvailable) {
-                            // ヘルスコネクトはこのデバイスでは利用できません
-                            // 何も表示しない
-                        } else if (!uiState.hasHealthConnectPermissions) {
-                            Text(
-                                text = "ヘルスコネクトに接続されていません",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Gray
-                            )
-                        }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("歩数記録を確認")
                     }
                 }
             }
@@ -426,7 +349,6 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
-                    // ネストした LazyColumn の代わりに、ここで直接 items を使用
                     items(uiState.sections, key = { it.sectionId }) { summary ->
                         SwipeableSectionCard(
                             sectionSummary = summary,
@@ -443,23 +365,9 @@ fun HomeScreen(
 
     // 削除確認ダイアログ
     if (uiState.showDeleteConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { homeViewModel.cancelDeletion() },
-            title = { Text("セクションの削除") },
-            text = { Text("このセクションを削除しますか？\nこの操作は元に戻せません。") },
-            confirmButton = {
-                TextButton(
-                    onClick = { homeViewModel.confirmDeletion() },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
-                ) {
-                    Text("削除")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { homeViewModel.cancelDeletion() }) {
-                    Text("キャンセル")
-                }
-            }
+        DeleteConfirmDialog(
+            onConfirm = { homeViewModel.confirmDeletion() },
+            onDismiss = { homeViewModel.cancelDeletion() }
         )
     }
 
@@ -471,19 +379,173 @@ fun HomeScreen(
                 homeViewModel.dismissDeleteDoneDialog()
             }
         }
-
-        AlertDialog(
-            onDismissRequest = { homeViewModel.dismissDeleteDoneDialog() },
-            title = { Text("削除完了") },
-            text = { Text("セクションを削除しました。") },
-            confirmButton = {
-                TextButton(onClick = { homeViewModel.dismissDeleteDoneDialog() }) {
-                    Text("OK")
-                }
-            }
-        )
+        DeleteDoneDialog(onDismiss = { homeViewModel.dismissDeleteDoneDialog() })
     }
 }
+
+// --- ダイアログや複雑なコンポーネントを別Composableに分割 ---
+
+@Composable
+private fun GpsDisabledDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("位置情報が無効です") },
+        text = { Text("位置情報を利用するには、端末の設定で位置情報サービスを有効にしてください。") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("設定を開く") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("キャンセル") }
+        }
+    )
+}
+
+@Composable
+private fun GpsLostDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("記録を停止しました") },
+        text = { Text("GPSがオフになったため、記録を自動的に停止しました。") },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK") }
+        }
+    )
+}
+
+@Composable
+private fun AddressDialog(address: String?, featureName: String?, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("現在地の住所") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = address ?: "住所を取得中...",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                if (!featureName.isNullOrBlank()) {
+                    Text(
+                        text = featureName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK") }
+        }
+    )
+}
+
+@Composable
+private fun DailyStepsDialog(dailySteps: List<Pair<String, Long>>, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("過去7日間の歩数記録") },
+        text = {
+            if (dailySteps.isEmpty()) {
+                Text("記録がありません。")
+            } else {
+                LazyColumn {
+                    items(dailySteps) { (date, steps) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = date)
+                            Text(text = "$steps 歩", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("閉じる") }
+        }
+    )
+}
+
+@Composable
+private fun DeleteConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("セクションの削除") },
+        text = { Text("このセクションを削除しますか？\nこの操作は元に戻せません。") },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+            ) { Text("削除") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("キャンセル") }
+        }
+    )
+}
+
+@Composable
+private fun DeleteDoneDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("削除完了") },
+        text = { Text("セクションを削除しました。") },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK") }
+        }
+    )
+}
+
+@Composable
+private fun CurrentStatusCard(uiState: HomeUiState) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (uiState.isRunning) {
+            if (uiState.sensorMode != SensorMode.HEALTH_CONNECT) {
+                Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
+                Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+            Text(text = "現在の位置情報の数", style = MaterialTheme.typography.titleMedium)
+            Text(text = "${uiState.currentTrackPointCount}", style = MaterialTheme.typography.displayLarge)
+
+            val sensorText = when (uiState.sensorMode) {
+                SensorMode.COUNTER -> "取得方法: 歩数カウンター (ハードウェア)"
+                SensorMode.DETECTOR -> "取得方法: 歩数検出器 (ハードウェア)"
+                SensorMode.HEALTH_CONNECT -> {
+                    if (uiState.hasHealthConnectPermissions) "取得方法: ヘルスコネクト"
+                    else "取得方法: ヘルスコネクト (権限不足)"
+                }
+                SensorMode.UNAVAILABLE -> "取得方法: 利用不可"
+            }
+            Text(
+                text = sensorText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        } else {
+            Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
+            val displaySteps = if (uiState.isHealthConnectAvailable && uiState.hasHealthConnectPermissions) {
+                uiState.todayHealthConnectSteps ?: uiState.todayStepCount.toLong()
+            } else {
+                uiState.todayStepCount.toLong()
+            }
+            Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (uiState.isHealthConnectAvailable && !uiState.hasHealthConnectPermissions) {
+                Text(
+                    text = "ヘルスコネクトに接続されていません",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray
+                )
+            }
+        }
+    }
+}
+
 
 /**
  * 横スワイプで削除ボタンを表示できるセクションカード。
@@ -502,16 +564,16 @@ private fun SwipeableSectionCard(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val offsetX = remember { Animatable(0f) }
-    val deleteButtonWidth = 80.dp // 削除ボタンの幅
-    val cardShape = CardDefaults.shape // カードのデフォルトの角丸を取得
-    val density = LocalDensity.current // LocalDensityを取得
+    val deleteButtonWidth = 80.dp
+    val cardShape = CardDefaults.shape
+    val density = LocalDensity.current
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.Red, shape = cardShape) // 背景を角丸で描画
+            .background(Color.Red, shape = cardShape)
     ) {
-        // 背景の削除ボタン
+        // Background delete button
         IconButton(
             onClick = {
                 // スワイプをリセットしてから削除処理を呼ぶ
@@ -532,7 +594,7 @@ private fun SwipeableSectionCard(
             )
         }
 
-        // 前景のカード
+        // Foreground card
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -542,22 +604,18 @@ private fun SwipeableSectionCard(
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
                             coroutineScope.launch {
-                                // ドラッグ量を現在のオフセットに加算
-                                val newOffset = with(density) {
-                                    (offsetX.value + dragAmount).coerceIn(
-                                        -deleteButtonWidth.toPx() * 1.2f,
-                                        0f
-                                    )
-                                }
+                                val newOffset = (offsetX.value + dragAmount).coerceIn(
+                                    -with(density) { deleteButtonWidth.toPx() } * 1.2f,
+                                    0f
+                                )
                                 offsetX.snapTo(newOffset)
                             }
                         },
                         onDragEnd = {
                             coroutineScope.launch {
-                                // ドラッグ終了時のオフセットがボタン幅の半分以上なら、ボタンを表示した位置で固定
-                                val threshold = with(density) { -deleteButtonWidth.toPx() / 2 }
+                                val threshold = -with(density) { deleteButtonWidth.toPx() / 2 }
                                 if (offsetX.value < threshold) {
-                                    with(density) { offsetX.animateTo(-deleteButtonWidth.toPx()) }
+                                    offsetX.animateTo(-with(density) { deleteButtonWidth.toPx() })
                                 } else {
                                     offsetX.animateTo(0f)
                                 }
@@ -569,8 +627,7 @@ private fun SwipeableSectionCard(
                     // カードがスワイプされていない場合のみクリックを処理
                     if (offsetX.value == 0f) {
                         onClick()
-                    }
-                    else {
+                    } else {
                         // スワイプされている場合は元の位置に戻す
                         coroutineScope.launch {
                             offsetX.animateTo(0f)
@@ -636,8 +693,7 @@ private fun SwipeableSectionCard(
                         if (sectionSummary.distanceMeters != null) {
                             val meters = sectionSummary.distanceMeters
                             val distanceDisplay = if (displayUnit == "mile") {
-                                val miles = meters / 1609.34
-                                "距離: %.2f mile".format(miles)
+                                "距離: %.2f mile".format(meters / 1609.34)
                             } else {
                                 "距離: %.2f km".format(meters / 1000.0)
                             }
@@ -656,23 +712,24 @@ private fun SwipeableSectionCard(
                 IconButton(
                     onClick = {
                         coroutineScope.launch {
-                            with(density) { offsetX.animateTo(-deleteButtonWidth.toPx()) }
+                            offsetX.animateTo(-with(density) { deleteButtonWidth.toPx() })
                         }
                     },
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                        contentDescription = "アクションを表示",
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                        modifier = Modifier
-                                            .border(
-                                                width = 1.dp,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                                shape = CircleShape
-                                            )
-                                            .padding(4.dp) // ボーダーの内側に少しパディングを追加
-                                    )                }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                        contentDescription = "アクションを表示",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                shape = CircleShape
+                            )
+                            .padding(4.dp)
+                    )
+                }
             }
         }
     }

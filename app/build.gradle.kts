@@ -81,6 +81,10 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation("com.google.android.gms:play-services-location:21.0.1")
+    // Recording API (歩数) のために追加
+    implementation("com.google.android.gms:play-services-fitness:21.3.0")
+    // Fitness API(Task)とコルーチンを連携させるために追加
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("com.google.maps.android:maps-compose:2.11.4")
     implementation("com.google.maps.android:maps-utils-ktx:3.4.0")
 }
