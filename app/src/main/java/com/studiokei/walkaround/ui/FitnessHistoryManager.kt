@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -56,6 +57,7 @@ class FitnessHistoryManager(private val context: Context) {
     /**
      * 歩数データのバックグラウンド収集を開始（購読）します。
      */
+    @RequiresPermission(Manifest.permission.ACTIVITY_RECOGNITION)
     suspend fun subscribeToSteps() {
         try {
             localRecordingClient.subscribe(LocalDataType.TYPE_STEP_COUNT_DELTA).await()

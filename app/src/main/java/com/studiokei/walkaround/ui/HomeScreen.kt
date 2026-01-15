@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,7 +67,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
@@ -85,7 +85,6 @@ fun HomeScreen(
     onSectionClick: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
-    // --- ViewModelの初期化でFitnessHistoryManagerを渡すように変更 ---
     val homeViewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -96,7 +95,7 @@ fun HomeScreen(
                     appDatabase,
                     StepSensorManager(context, healthConnectManager),
                     healthConnectManager,
-                    FitnessHistoryManager(context) // FitnessHistoryManagerをインスタンス化
+                    FitnessHistoryManager(context)
                 )
             }
         }
@@ -129,28 +128,12 @@ fun HomeScreen(
     ) { isGranted ->
         // ViewModelに権限結果を通知
         homeViewModel.onActivityRecognitionPermissionResult(isGranted)
-
-        // --- トラッキング開始ロジックを権限リクエストの後に移動 ---
-        if (uiState.sensorMode == SensorMode.HEALTH_CONNECT && !uiState.hasHealthConnectPermissions) {
-            // Health Connectが必要な場合は、その権限をリクエスト
-            healthConnectPermissionsLauncher.launch(arrayOf("androidx.health.connect.permission.read.STEPS"))
-        } else {
-            // それ以外の場合はトラッキングを開始
-            homeViewModel.startTracking()
-        }
     }
 
     // --- 位置情報の権限リクエスト用ランチャー ---
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions.getOrDefault(Manifest.permission.ACCESS_FINE_LOCATION, false) ||
-            permissions.getOrDefault(Manifest.permission.ACCESS_COARSE_LOCATION, false)
-        ) {
-            // 位置情報が許可されたら、トラッキング開始処理を呼び出す
-            homeViewModel.startTracking()
-        }
-    }
+    ) { /* 権限リクエスト後のアクションは、呼び出し元のボタンに責任を移譲 */ }
 
     // Android 13以降での通知権限の確認
     LaunchedEffect(Unit) {
@@ -195,7 +178,7 @@ fun HomeScreen(
             activityRecognitionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
             return
         }
-        
+
         // 3. 必要な権限がすべて揃っている場合
         homeViewModel.startTracking()
     }
@@ -249,7 +232,7 @@ fun HomeScreen(
         )
     }
     
-    // --- 【新規追加】歩数履歴表示ダイアログ ---
+    // 歩数履歴表示ダイアログ
     if (uiState.showStepsDialog) {
         DailyStepsDialog(
             dailySteps = uiState.dailySteps,
@@ -283,17 +266,17 @@ fun HomeScreen(
                 CurrentStatusCard(uiState)
             }
 
-            // --- 【新規追加】歩数記録確認ボタン ---
+            // 歩数記録確認ボタン
             if (uiState.isFitnessApiAvailable) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            // 権限がない場合はリクエスト、ある場合はデータをフェッチ
-                            if (context.checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            val permission = Manifest.permission.ACTIVITY_RECOGNITION
+                            if (context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                 homeViewModel.fetchDailySteps()
                             } else {
-                                activityRecognitionPermissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                                activityRecognitionPermissionLauncher.launch(permission)
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -451,7 +434,9 @@ private fun DailyStepsDialog(dailySteps: List<Pair<String, Long>>, onDismiss: ()
                 LazyColumn {
                     items(dailySteps) { (date, steps) ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(text = date)
