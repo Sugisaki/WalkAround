@@ -42,13 +42,10 @@ data class HomeUiState(
     val currentStepCount: Int = 0,
     val currentTrackPointCount: Int = 0,
     val todayStepCount: Int = 0,
-    val todayHealthConnectSteps: Long? = null,
-    val isHealthConnectAvailable: Boolean = false,
     val currentAddress: String? = null,
     val currentFeatureName: String? = null,
     val showAddressDialog: Boolean = false,
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
-    val hasHealthConnectPermissions: Boolean = false,
     val sections: List<SectionSummary> = emptyList(),
     val displayUnit: String = "km",
     val isVoiceEnabled: Boolean = true,
@@ -70,7 +67,6 @@ class HomeViewModel(
     private val context: Context,
     private val database: AppDatabase,
     private val stepSensorManager: StepSensorManager,
-    private val healthConnectManager: HealthConnectManager,
     private val fitnessHistoryManager: FitnessHistoryManager // FitnessHistoryManager を追加
 ) : ViewModel(), TextToSpeech.OnInitListener {
 
@@ -127,17 +123,10 @@ class HomeViewModel(
             }.launchIn(viewModelScope)
 
             // センサーモード等の初期確認
-            val isHCEnabled = healthConnectManager.isAvailable
-            val hasPermissions = if (isHCEnabled) healthConnectManager.hasPermissions() else false
             _uiState.update {
                 it.copy(
                     sensorMode = stepSensorManager.sensorMode,
-                    hasHealthConnectPermissions = hasPermissions,
-                    isHealthConnectAvailable = isHCEnabled
                 )
-            }
-            if (hasPermissions) {
-                fetchHealthConnectSteps()
             }
 
             // --- Fitness API関連の初期化処理を追加 ---
@@ -168,8 +157,6 @@ class HomeViewModel(
                 _uiState.update { it.copy(isRunning = running) }
                 if (!running) {
                     _uiState.update { it.copy(currentAddress = null, currentFeatureName = null) }
-                    // 計測終了時にヘルスコネクトの歩数を再取得
-                    fetchHealthConnectSteps()
                 }
             }.launchIn(viewModelScope)
 
@@ -180,26 +167,6 @@ class HomeViewModel(
             service.currentTrackCount.onEach { count ->
                 _uiState.update { it.copy(currentTrackPointCount = count) }
             }.launchIn(viewModelScope)
-        }
-    }
-
-    /**
-     * ヘルスコネクトから本日の歩数を取得してUI状態を更新します。
-     */
-    private fun fetchHealthConnectSteps() {
-        viewModelScope.launch {
-            if (!healthConnectManager.isAvailable || !healthConnectManager.hasPermissions()) {
-                _uiState.update { it.copy(todayHealthConnectSteps = null) }
-                return@launch
-            }
-            val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
-            val now = Instant.now()
-            try {
-                val steps = healthConnectManager.readSteps(startOfDay, now)
-                _uiState.update { it.copy(todayHealthConnectSteps = steps) }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(todayHealthConnectSteps = null) }
-            }
         }
     }
 
@@ -394,19 +361,6 @@ class HomeViewModel(
     fun dismissAddressDialog() {
         _uiState.update { it.copy(showAddressDialog = false) }
         ttsHelper.stop()
-    }
-
-    /**
-     * Health Connect の権限リクエスト結果を処理します。
-     */
-    fun onHealthConnectPermissionsResult(granted: Boolean) {
-        viewModelScope.launch {
-            val hasPermissions = healthConnectManager.hasPermissions()
-            _uiState.update { it.copy(hasHealthConnectPermissions = hasPermissions) }
-            if (hasPermissions) {
-                fetchHealthConnectSteps()
-            }
-        }
     }
 
     /**

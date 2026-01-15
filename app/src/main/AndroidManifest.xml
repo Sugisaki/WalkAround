@@ -2,9 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ヘルスコネクト用の権限 (一時的に無効化) -->
-    <!-- <uses-permission android:name="android.permission.health.READ_STEPS" /> -->
-
     <!-- 各種センサーは必須ではないことを宣言 -->
     <uses-feature android:name="android.hardware.sensor.activity_recognition" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
@@ -17,13 +14,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- ヘルスコネクトアプリを確認するための設定 (一時的に無効化) -->
-    <!--
-    <queries>
-        <package android:name="com.google.android.apps.healthdata" />
-    </queries>
-    -->
 
     <application
         android:allowBackup="true"
@@ -44,16 +34,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- ヘルスコネクトの権限合理性説明（Rationale）を受け取るための intent-filter (一時的に無効化) -->
-            <!--
-            <intent-filter>
-                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
-            </intent-filter>
-            -->
-
-            <!-- <meta-data
-                android:name="health_permissions"
-                android:resource="@array/health_permissions" /> -->
         </activity>
 
         <service

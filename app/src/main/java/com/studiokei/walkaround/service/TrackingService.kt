@@ -21,7 +21,6 @@ import com.studiokei.walkaround.data.model.AddressRecord
 import com.studiokei.walkaround.data.model.Section
 import com.studiokei.walkaround.data.model.StepSegment
 import com.studiokei.walkaround.data.model.TrackPoint
-import com.studiokei.walkaround.ui.HealthConnectManager
 import com.studiokei.walkaround.ui.LocationManager
 import com.studiokei.walkaround.ui.StepSensorManager
 import com.studiokei.walkaround.util.Constants
@@ -56,8 +55,6 @@ class TrackingService : Service() {
     private lateinit var stepSensorManager: StepSensorManager
     private lateinit var locationManager: LocationManager
     private lateinit var ttsHelper: TextToSpeechHelper
-    private lateinit var healthConnectManager: HealthConnectManager
-
     private var currentSessionId: Long? = null
     private var startTimeMillis: Long = 0L
     private var sensorJob: Job? = null
@@ -74,10 +71,7 @@ class TrackingService : Service() {
     private var lastAccurateLocation: Location? = null
     private var lastAccurateTrackId: Long? = null
     private var lastProcessedLocation: Location? = null
-    
-    // ヘルスコネクト計測用
-    private var hcStartTotalSteps: Long = 0L
-    
+
     private val addressCheckMutex = Mutex()
 
     private val _currentSteps = MutableStateFlow(0)
@@ -98,8 +92,7 @@ class TrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         database = AppDatabase.getDatabase(this)
-        healthConnectManager = HealthConnectManager(this)
-        stepSensorManager = StepSensorManager(this, healthConnectManager)
+        stepSensorManager = StepSensorManager(this)
         locationManager = LocationManager(this)
         ttsHelper = TextToSpeechHelper(this)
 
@@ -135,7 +128,6 @@ class TrackingService : Service() {
         lastAccurateTrackId = null
         lastProcessedLocation = null
         startTimeMillis = System.currentTimeMillis()
-        hcStartTotalSteps = 0L
 
         val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -175,13 +167,6 @@ class TrackingService : Service() {
                 createdAtTimestamp = startTimeMillis
             )
             currentSessionId = database.sectionDao().insertSection(newSection)
-            
-            // ヘルスコネクトモードの場合、開始時点の本日の累計歩数を記録
-            if (stepSensorManager.sensorMode == StepSensorManager.SensorMode.HEALTH_CONNECT) {
-                val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
-                hcStartTotalSteps = healthConnectManager.readSteps(startOfDay, Instant.now())
-                Log.i("TrackingService", "【最新版】計測開始時のヘルスコネクト累計歩数: $hcStartTotalSteps")
-            }
         }
     }
 
@@ -189,7 +174,7 @@ class TrackingService : Service() {
         sensorJob?.cancel()
         sensorJob = stepSensorManager.steps().onEach { steps ->
             _currentSteps.value = steps
-            val displaySteps = if (stepSensorManager.sensorMode == StepSensorManager.SensorMode.HEALTH_CONNECT) "---" else "$steps"
+            val displaySteps = "$steps"
             updateNotification("歩数: $displaySteps, 位置情報: ${trackPointCounter}件")
         }.launchIn(serviceScope)
     }
@@ -233,7 +218,7 @@ class TrackingService : Service() {
             
             trackPointCounter++
             _currentTrackCount.value = trackPointCounter
-            val displaySteps = if (stepSensorManager.sensorMode == StepSensorManager.SensorMode.HEALTH_CONNECT) "---" else "${_currentSteps.value}"
+            val displaySteps = "${_currentSteps.value}"
             updateNotification("歩数: $displaySteps, 位置情報: ${trackPointCounter}件")
 
             sessionId?.let { id ->
@@ -336,22 +321,7 @@ class TrackingService : Service() {
 
         serviceScope.launch {
             try {
-                // ヘルスコネクトモードの場合、開始時と終了時の「本日の総計」の差分を取る
                 var finalSteps = initialSteps
-                if (stepSensorManager.sensorMode == StepSensorManager.SensorMode.HEALTH_CONNECT) {
-                    try {
-                        val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant()
-                        // 反映遅延を考慮して終了時刻を少し未来にする
-                        val endInstant = Instant.ofEpochMilli(endT).plusSeconds(10)
-                        
-                        val hcEndTotalSteps = healthConnectManager.readSteps(startOfDay, endInstant)
-                        finalSteps = (hcEndTotalSteps - hcStartTotalSteps).toInt().coerceAtLeast(0)
-                        Log.i("TrackingService", "【最新版】終了時累計: $hcEndTotalSteps, 開始時累計: $hcStartTotalSteps, 増分: $finalSteps")
-                    } catch (e: Exception) {
-                        Log.e("TrackingService", "【最新版】ヘルスコネクトの歩数取得に失敗", e)
-                    }
-                }
-
                 val currentSettings = database.settingsDao().getSettings().first()
                 val limit = currentSettings?.locationAccuracyLimit ?: 20.0f
 

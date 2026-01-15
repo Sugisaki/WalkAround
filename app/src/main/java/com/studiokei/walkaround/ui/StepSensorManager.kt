@@ -11,8 +11,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import java.time.Instant
 
 class StepSensorManager(
-    context: Context,
-    private val healthConnectManager: HealthConnectManager
+    context: Context
 ) {
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
@@ -22,7 +21,6 @@ class StepSensorManager(
     val sensorMode: SensorMode = when {
         stepCounterSensor != null -> SensorMode.COUNTER
         stepDetectorSensor != null -> SensorMode.DETECTOR
-        healthConnectManager.isAvailable -> SensorMode.HEALTH_CONNECT
         else -> SensorMode.UNAVAILABLE
     }
 
@@ -60,11 +58,6 @@ class StepSensorManager(
             SensorMode.COUNTER, SensorMode.DETECTOR -> {
                 startDirectSensor(listener)
             }
-            SensorMode.HEALTH_CONNECT -> {
-                // ヘルスコネクトの場合はリアルタイムでの増分取得が難しいため、
-                // 計測中は 0 を返し、停止時に期間内の合計を取得する運用とする。
-                trySend(0)
-            }
             SensorMode.UNAVAILABLE -> { /* Do nothing */ }
         }
 
@@ -89,6 +82,6 @@ class StepSensorManager(
     }
 
     enum class SensorMode {
-        COUNTER, DETECTOR, HEALTH_CONNECT, UNAVAILABLE
+        COUNTER, DETECTOR, UNAVAILABLE
     }
 }

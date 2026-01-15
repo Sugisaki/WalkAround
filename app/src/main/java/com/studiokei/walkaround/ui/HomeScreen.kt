@@ -91,12 +91,10 @@ fun HomeScreen(
         factory = viewModelFactory {
             initializer {
                 val appDatabase = AppDatabase.getDatabase(context)
-                val healthConnectManager = HealthConnectManager(context)
                 HomeViewModel(
                     context.applicationContext,
                     appDatabase,
-                    StepSensorManager(context, healthConnectManager),
-                    healthConnectManager,
+                    StepSensorManager(context),
                     FitnessHistoryManager(context)
                 )
             }
@@ -116,13 +114,6 @@ fun HomeScreen(
     val locationSettingsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { /* 設定画面から戻ってきた際の処理は必要に応じて追加 */ }
-
-    // --- Health Connectの権限リクエスト用ランチャー ---
-    val healthConnectPermissionsLauncher = rememberLauncherForActivityResult(
-        contract = HealthConnectManager(context).requestPermissionsContract()
-    ) { grantedPermissions ->
-        homeViewModel.onHealthConnectPermissionsResult(grantedPermissions.values.all { it })
-    }
 
     // --- 身体活動(Activity Recognition)の権限リクエスト用ランチャー ---
     val activityRecognitionPermissionLauncher = rememberLauncherForActivityResult(
@@ -254,18 +245,18 @@ fun HomeScreen(
             if (uiState.sensorMode == SensorMode.UNAVAILABLE) {
                 item {
                     Text(
-                        text = "歩数計センサーまたはヘルスコネクトがこのデバイスでは利用できません。",
+                        text = "歩数計センサーが利用できません。",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Color.Red,
+                        color = Color.Gray,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        modifier = Modifier.padding(bottom = 11.dp)
                     )
                 }
-            }
-
-            // 歩数・位置情報表示
-            item {
-                CurrentStatusCard(uiState)
+            } else {
+                // 歩数・位置情報表示
+                item {
+                    CurrentStatusCard(uiState)
+                }
             }
 
             // デバッグモード時のみ表示する
@@ -491,21 +482,15 @@ private fun DeleteDoneDialog(onDismiss: () -> Unit) {
 private fun CurrentStatusCard(uiState: HomeUiState) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (uiState.isRunning) {
-            if (uiState.sensorMode != SensorMode.HEALTH_CONNECT) {
-                Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
-                Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
+            Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
+            Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
+            Spacer(modifier = Modifier.height(8.dp))
             Text(text = "現在の位置情報の数", style = MaterialTheme.typography.titleMedium)
             Text(text = "${uiState.currentTrackPointCount}", style = MaterialTheme.typography.displayLarge)
 
             val sensorText = when (uiState.sensorMode) {
                 SensorMode.COUNTER -> "取得方法: 歩数カウンター (ハードウェア)"
                 SensorMode.DETECTOR -> "取得方法: 歩数検出器 (ハードウェア)"
-                SensorMode.HEALTH_CONNECT -> {
-                    if (uiState.hasHealthConnectPermissions) "取得方法: ヘルスコネクト"
-                    else "取得方法: ヘルスコネクト (権限不足)"
-                }
                 SensorMode.UNAVAILABLE -> "取得方法: 利用不可"
             }
             Text(
@@ -516,22 +501,9 @@ private fun CurrentStatusCard(uiState: HomeUiState) {
             )
         } else {
             Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
-            val displaySteps = if (uiState.isHealthConnectAvailable && uiState.hasHealthConnectPermissions) {
-                uiState.todayHealthConnectSteps ?: uiState.todayStepCount.toLong()
-            } else {
-                uiState.todayStepCount.toLong()
-            }
+            val displaySteps = uiState.todayStepCount.toLong()
             Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
-
             Spacer(modifier = Modifier.height(8.dp))
-
-            if (uiState.isHealthConnectAvailable && !uiState.hasHealthConnectPermissions) {
-                Text(
-                    text = "ヘルスコネクトに接続されていません",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray
-                )
-            }
         }
     }
 }
