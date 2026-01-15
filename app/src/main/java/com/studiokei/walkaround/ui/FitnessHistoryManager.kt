@@ -29,7 +29,8 @@ class FitnessHistoryManager(private val context: Context) {
     private val localRecordingClient = FitnessLocal.getLocalRecordingClient(context)
 
     /**
-     * Google Play Servicesが利用可能で、かつAPIが要求するバージョンを満たしているかを確認します。
+     * Fitness API (Recording API) がこのデバイスで利用可能かを確認します。
+     * これには、Google Play Servicesのバージョンが適切であるかのチェックが含まれます。
      * @return trueの場合、利用可能です。
      */
     fun isGooglePlayServicesAvailable(): Boolean {
@@ -37,9 +38,15 @@ class FitnessHistoryManager(private val context: Context) {
         // クラスパスを修正
         val resultCode = availability.isGooglePlayServicesAvailable(context, LocalRecordingClient.LOCAL_RECORDING_CLIENT_MIN_VERSION_CODE)
         if (resultCode != ConnectionResult.SUCCESS) {
-            Log.w(TAG, "Google Play Services update required. Result code: $resultCode")
+            // 失敗した理由を具体的にログに出力
+            val errorString = availability.getErrorString(resultCode)
+            Log.w(TAG, "isFitnessApiAvailable: Google Play Services check failed. Result code: $resultCode ($errorString)")
             return false
+        } else {
+            Log.i(TAG, "isFitnessApiAvailable: Google Play Services check passed.")
         }
+
+        Log.i(TAG, "isFitnessApiAvailable: All checks passed. API is available.")
         return true
     }
 

@@ -73,6 +73,8 @@ import androidx.compose.ui.unit.IntOffset
 import com.studiokei.walkaround.data.model.SectionSummary
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import android.util.Log
+import com.studiokei.walkaround.BuildConfig
 
 
 /**
@@ -266,8 +268,9 @@ fun HomeScreen(
                 CurrentStatusCard(uiState)
             }
 
+            // デバッグモード時のみ表示する
             // 歩数記録確認ボタン
-            if (uiState.isFitnessApiAvailable) {
+            if (uiState.isFitnessApiAvailable && BuildConfig.DEBUG) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
@@ -275,13 +278,15 @@ fun HomeScreen(
                             val permission = Manifest.permission.ACTIVITY_RECOGNITION
                             if (context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                 homeViewModel.fetchDailySteps()
+                                Log.d("HomeScreen", "Permission granted")
                             } else {
                                 activityRecognitionPermissionLauncher.launch(permission)
+                                Log.e("HomeScreen", "Permission not granted")
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("歩数記録を確認")
+                        Text("歩数記録を確認 デバッグ")
                     }
                 }
             }
