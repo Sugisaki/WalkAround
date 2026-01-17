@@ -44,6 +44,8 @@ data class HomeUiState(
     val todayStepCount: Int = 0,
     val currentAddress: String? = null,
     val currentFeatureName: String? = null,
+    val displayAddress: String? = null, // 画面に表示する現在の住所
+    val displayFeatureName: String? = null, // 画面に表示する現在の地物名
     val showAddressDialog: Boolean = false,
     val sensorMode: SensorMode = SensorMode.UNAVAILABLE,
     val sections: List<SectionSummary> = emptyList(),
@@ -133,8 +135,12 @@ class HomeViewModel(
             val isFitnessAvailable = fitnessHistoryManager.isGooglePlayServicesAvailable()
             _uiState.update { it.copy(isFitnessApiAvailable = isFitnessAvailable) }
 
+            // --- Fitness API関連の初期化処理を追加 ---
+            val isFitnessApiAvailable = fitnessHistoryManager.isGooglePlayServicesAvailable()
+            _uiState.update { it.copy(isFitnessApiAvailable = isFitnessApiAvailable) }
+
             // Fitness APIが利用可能で、権限がある場合は歩数データの購読を開始
-            if (isFitnessAvailable && fitnessHistoryManager.hasActivityRecognitionPermission()) {
+            if (isFitnessApiAvailable && fitnessHistoryManager.hasActivityRecognitionPermission()) {
                 subscribeToFitnessData()
             }
         }
@@ -167,6 +173,13 @@ class HomeViewModel(
             service.currentTrackCount.onEach { count ->
                 _uiState.update { it.copy(currentTrackPointCount = count) }
             }.launchIn(viewModelScope)
+
+            service.onAddressUpdate = { addressRecord ->
+                _uiState.update { it.copy(
+                    displayAddress = addressRecord.addressDisplay(),
+                    displayFeatureName = addressRecord.featureNameDisplay()
+                ) }
+            }
         }
     }
 

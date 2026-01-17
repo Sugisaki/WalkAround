@@ -242,28 +242,51 @@ fun HomeScreen(
             contentPadding = PaddingValues(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // エラー表示
-            if (uiState.sensorMode == SensorMode.UNAVAILABLE) {
-                item {
-                    Text(
-                        text = "歩数計センサーが利用できません。",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.Gray,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 11.dp)
-                    )
+            // 歩数・位置情報表示
+            item {
+                CurrentStatusCard(uiState)
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // スタート／ストップボタン
+            item {
+                val isRunning = uiState.isRunning
+                val buttonText = if (isRunning) "ストップ" else "スタート"
+                val onClickAction = if (isRunning) {
+                    { homeViewModel.stopTracking() }
+                } else {
+                    { handleStartClick() }
                 }
-            } else {
-                // 歩数・位置情報表示
-                item {
-                    CurrentStatusCard(uiState)
+
+                Button(
+                    onClick = onClickAction,
+                    modifier = Modifier
+                        .width(200.dp)
+                        .height(50.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            buttonText,
+                            style = MaterialTheme.typography.headlineMedium
+                        )
+                    }
                 }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
             }
 
             // 歩数記録確認ボタン（Android 10 以上）
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uiState.isFitnessApiAvailable) {
                 item {
-                    Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
                             val permission = Manifest.permission.ACTIVITY_RECOGNITION
@@ -275,26 +298,11 @@ fun HomeScreen(
                                 Log.e("HomeScreen", "Permission not granted")
                             }
                         },
-                        shape = RectangleShape,
-                        border = BorderStroke(1.dp, Color.Black),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White,
-                            contentColor = Color.Black
-                        ),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text(
-                            "歩数記録を確認",
-                            style = MaterialTheme.typography.labelSmall
-                        )
+                        Text("歩数記録を表示")
                     }
                 }
             }
-
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
             // 住所表示ボタン
             item {
                 Button(onClick = { handleFetchAddressClick() }) {
@@ -302,19 +310,31 @@ fun HomeScreen(
                 }
             }
 
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-
-            // スタート／ストップボタン
-            item {
-                if (uiState.isRunning) {
-                    Button(onClick = { homeViewModel.stopTracking() }) {
-                        Text("ストップ")
-                    }
-                } else {
-                    Button(onClick = { handleStartClick() }) {
-                        Text("スタート")
+            // 走行中の住所表示
+            if (uiState.isRunning) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        uiState.displayAddress?.let { address ->
+                            Text(
+                                text = address,
+                                style = MaterialTheme.typography.bodyLarge,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        uiState.displayFeatureName?.let { featureName ->
+                            Text(
+                                text = featureName,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
@@ -490,29 +510,37 @@ private fun DeleteDoneDialog(onDismiss: () -> Unit) {
 @Composable
 private fun CurrentStatusCard(uiState: HomeUiState) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        if (uiState.isRunning) {
-            Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
-            Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = "現在の位置情報の数", style = MaterialTheme.typography.titleMedium)
-            Text(text = "${uiState.currentTrackPointCount}", style = MaterialTheme.typography.displayLarge)
 
-            val sensorText = when (uiState.sensorMode) {
-                SensorMode.COUNTER -> "取得方法: 歩数カウンター (ハードウェア)"
-                SensorMode.DETECTOR -> "取得方法: 歩数検出器 (ハードウェア)"
-                SensorMode.UNAVAILABLE -> "取得方法: 利用不可"
-            }
-            Text(
-                text = sensorText,
+        if (uiState.sensorMode != SensorMode.UNAVAILABLE) {
+            if (uiState.isRunning) {
+                Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
+                Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                val sensorText = when (uiState.sensorMode) {
+                    SensorMode.COUNTER -> "取得方法: 歩数カウンター (ハードウェア)"
+                    SensorMode.DETECTOR -> "取得方法: 歩数検出器 (ハードウェア)"
+                    SensorMode.UNAVAILABLE -> "取得方法: 利用不可"
+                }
+                Text(
+                    text = sensorText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            } else {
+                Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
+                val displaySteps = uiState.todayStepCount.toLong()
+                Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                }
+        }
+
+        if (uiState.isRunning) {
+            Text(text = "現在の位置情報の数: ${uiState.currentTrackPointCount}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.padding(top = 8.dp)
             )
-        } else {
-            Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
-            val displaySteps = uiState.todayStepCount.toLong()
-            Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
-            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
@@ -672,11 +700,13 @@ private fun SwipeableSectionCard(
                         } else {
                             Text(text = "距離: ---", style = MaterialTheme.typography.bodyMedium)
                         }
-                        Text(
-                            text = "歩数: ${sectionSummary.steps}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.End
-                        )
+                        if (sectionSummary.steps > 0) {
+                            Text(
+                                text = "歩数: ${sectionSummary.steps}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.End
+                            )
+                        }
                     }
                 }
                 // アクションを開くためのインジケーターボタン

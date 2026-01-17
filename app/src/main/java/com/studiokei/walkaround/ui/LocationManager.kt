@@ -252,8 +252,8 @@ class LocationManager(private val context: Context) {
         trackId: Long? = null,
         timestamp: Long? = null,
         address: Address? = null // 既に取得済みの場合はこれを使い回す
-    ) {
-        withContext(Dispatchers.IO) {
+    ): AddressRecord {
+        return withContext(Dispatchers.IO) {
             val time = timestamp ?: System.currentTimeMillis()
             
             // 引数で address が渡されていない場合のみ取得を試みる
@@ -275,6 +275,7 @@ class LocationManager(private val context: Context) {
             )
             database.addressDao().insert(record)
             Log.d("LocationManager", "AddressRecord saved: $record")
+            record
         }
     }
 }

@@ -205,11 +205,13 @@ fun SectionBlock(
                 )
 
                 // 右側：歩数
-                Text(
-                    text = "歩数: ${group.steps}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (group.steps > 0) {
+                    Text(
+                        text = "歩数: ${group.steps}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             // 境界線を追加（細く薄い線）

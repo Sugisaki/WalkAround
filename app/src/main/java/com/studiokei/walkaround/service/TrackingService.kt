@@ -74,6 +74,8 @@ class TrackingService : Service() {
 
     private val addressCheckMutex = Mutex()
 
+    var onAddressUpdate: ((AddressRecord) -> Unit)? = null
+
     private val _currentSteps = MutableStateFlow(0)
     val currentSteps: StateFlow<Int> = _currentSteps.asStateFlow()
 
@@ -284,7 +286,7 @@ class TrackingService : Service() {
             Log.i("TrackingService", "Updating address record. Key: $currentKey")
             lastThoroughfareKey = currentKey
             
-            locationManager.saveAddressRecord(
+            val insertedAddressRecord = locationManager.saveAddressRecord(
                 lat = location.latitude,
                 lng = location.longitude,
                 sectionId = sessionId,
@@ -292,6 +294,9 @@ class TrackingService : Service() {
                 timestamp = currentTime,
                 address = address
             )
+            insertedAddressRecord?.let {
+                onAddressUpdate?.invoke(it)
+            }
 
             if (isVoiceEnabled) {
                 val speakText = AddressRecord(address = address).cityDisplayWithFeature()
