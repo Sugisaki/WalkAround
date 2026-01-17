@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.util.Log
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -48,8 +49,14 @@ class StepSensorManager(
                         }
                         trySend(sessionSteps)
                     }
-                    else -> { /* Do nothing */ }
+                    else -> {
+                        /* Do nothing */
+                        Log.e("StepSensorManager", "Unsupported sensor mode: $sensorMode")
+                    }
                 }
+
+                Log.d("StepSensorManager", "sensor mode: $sensorMode")
+
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }

@@ -9,14 +9,16 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.fitness.FitnessLocal
-import com.google.android.gms.fitness.LocalRecordingClient // Importを追加
+import com.google.android.gms.fitness.LocalRecordingClient
 import com.google.android.gms.fitness.data.LocalDataType
 import com.google.android.gms.fitness.request.LocalDataReadRequest
 import kotlinx.coroutines.tasks.await
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -35,10 +37,8 @@ class FitnessHistoryManager(private val context: Context) {
      */
     fun isGooglePlayServicesAvailable(): Boolean {
         val availability = GoogleApiAvailability.getInstance()
-        // クラスパスを修正
         val resultCode = availability.isGooglePlayServicesAvailable(context, LocalRecordingClient.LOCAL_RECORDING_CLIENT_MIN_VERSION_CODE)
         if (resultCode != ConnectionResult.SUCCESS) {
-            // 失敗した理由を具体的にログに出力
             val errorString = availability.getErrorString(resultCode)
             Log.w(TAG, "isFitnessApiAvailable: Google Play Services check failed. Result code: $resultCode ($errorString)")
             return false
@@ -84,7 +84,10 @@ class FitnessHistoryManager(private val context: Context) {
             return emptyList()
         }
 
-        val endTime = LocalDateTime.now().atZone(ZoneId.systemDefault())
+        // 日付の境界（午前0時）に合わせるため、LocalDate を使用します。
+        // 今日のデータも含まれるように、期間の終わりを明日の午前0時に設定します。
+        val endTime = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault())
+        // 指定された日数前の午前0時を開始時刻に設定します。
         val startTime = endTime.minusDays(days.toLong())
 
         val readRequest = LocalDataReadRequest.Builder()
@@ -93,18 +96,19 @@ class FitnessHistoryManager(private val context: Context) {
             .setTimeRange(startTime.toEpochSecond(), endTime.toEpochSecond(), TimeUnit.SECONDS)
             .build()
 
-        val stepData = mutableListOf<Pair<String, Long>>()
-        val dateFormatter = DateTimeFormatter.ofPattern("M/d")
+        // (LocalDate, Long) のペアを格納するリスト。ソートのために日付オブジェクトを保持
+        val stepData = mutableListOf<Pair<LocalDate, Long>>()
 
         try {
             val response = localRecordingClient.readData(readRequest).await()
             for (bucket in response.buckets) {
                 for (dataSet in bucket.dataSets) {
                     for (dp in dataSet.dataPoints) {
+                        // データポイントの開始時刻から LocalDate を取得
                         val date = LocalDateTime.ofInstant(
                             Instant.ofEpochSecond(dp.getStartTime(TimeUnit.SECONDS)),
                             ZoneId.systemDefault()
-                        ).format(dateFormatter)
+                        ).toLocalDate()
                         val steps = dp.getValue(dp.dataType.fields.first()).asInt().toLong()
                         if (steps > 0) {
                            stepData.add(date to steps)
@@ -118,7 +122,11 @@ class FitnessHistoryManager(private val context: Context) {
             return emptyList()
         }
 
-        return stepData.sortedBy { it.first }
+        // 日付の降順でソートしてから、表示用の文字列に変換
+        val dateFormatter = DateTimeFormatter.ofPattern("M月d日(E)", Locale.JAPAN)
+        return stepData.sortedByDescending { it.first }.map { (date, steps) ->
+            date.format(dateFormatter) to steps
+        }
     }
 
     companion object {
