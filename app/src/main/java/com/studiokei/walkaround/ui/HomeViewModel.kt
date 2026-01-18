@@ -55,6 +55,7 @@ data class HomeUiState(
     val showDeleteDoneDialog: Boolean = false,
     val sectionToDeleteId: Long? = null,
     val showGpsLostDialog: Boolean = false,
+    val showStopConfirmDialog: Boolean = false, // 走行停止の確認ダイアログ
 
     // Fitness API (Recording API) 関連
     val isFitnessApiAvailable: Boolean = false, // APIが利用可能か
@@ -229,7 +230,7 @@ class HomeViewModel(
         context.registerReceiver(gpsStatusReceiver, IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION))
     }
 
-    fun stopTracking() {
+    private fun stopTracking() {
         val intent = Intent(context, TrackingService::class.java).apply {
             action = TrackingService.ACTION_STOP
         }
@@ -240,6 +241,28 @@ class HomeViewModel(
         } catch (e: IllegalArgumentException) {
             // レシーバーがすでに登録解除されている場合に発生するが、無視してよい
         }
+    }
+
+    /**
+     * 走行停止のリクエストを受け、確認ダイアログを表示します。
+     */
+    fun requestStopTracking() {
+        _uiState.update { it.copy(showStopConfirmDialog = true) }
+    }
+
+    /**
+     * 走行停止をキャンセルし、確認ダイアログを閉じます。
+     */
+    fun cancelStopTracking() {
+        _uiState.update { it.copy(showStopConfirmDialog = false) }
+    }
+
+    /**
+     * 走行停止を確定し、トラッキングを停止します。
+     */
+    fun confirmStopTracking() {
+        _uiState.update { it.copy(showStopConfirmDialog = false) }
+        stopTracking()
     }
 
     /**

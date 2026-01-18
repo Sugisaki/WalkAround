@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Delete
@@ -256,7 +257,7 @@ fun HomeScreen(
                 val isRunning = uiState.isRunning
                 val buttonText = if (isRunning) "ストップ" else "スタート"
                 val onClickAction = if (isRunning) {
-                    { homeViewModel.stopTracking() }
+                    { homeViewModel.requestStopTracking() }
                 } else {
                     { handleStartClick() }
                 }
@@ -266,7 +267,8 @@ fun HomeScreen(
                     modifier = Modifier
                         .width(200.dp)
                         .height(50.dp),
-                    contentPadding = PaddingValues(0.dp)
+                    contentPadding = PaddingValues(0.dp),
+                    shape = RoundedCornerShape(24.dp) // 角丸
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -279,11 +281,9 @@ fun HomeScreen(
                     }
                 }
             }
-
             item {
                 Spacer(modifier = Modifier.height(24.dp))
             }
-
             // 歩数記録確認ボタン（Android 10 以上）
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uiState.isFitnessApiAvailable) {
                 item {
@@ -302,6 +302,9 @@ fun HomeScreen(
                         Text("歩数記録を表示")
                     }
                 }
+            }
+            item {
+                Spacer(modifier = Modifier.height(18.dp))
             }
             // 住所表示ボタン
             item {
@@ -389,6 +392,42 @@ fun HomeScreen(
         }
         DeleteDoneDialog(onDismiss = { homeViewModel.dismissDeleteDoneDialog() })
     }
+
+    // 走行停止確認ダイアログ
+    if (uiState.showStopConfirmDialog) {
+        LaunchedEffect(uiState.showStopConfirmDialog) {
+            if (uiState.showStopConfirmDialog) {
+                kotlinx.coroutines.delay(10000)
+                homeViewModel.cancelStopTracking()
+            }
+        }
+        StopConfirmDialog(
+            onConfirm = { homeViewModel.confirmStopTracking() },
+            onDismiss = { homeViewModel.cancelStopTracking() }
+        )
+    }
+}
+
+@Composable
+private fun StopConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("走行の停止") },
+        text = { Text("本当に走行を停止しますか？") },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Red,
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) { Text("ストップ", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("キャンセル") }
+        }
+    )
 }
 
 // --- ダイアログや複雑なコンポーネントを別Composableに分割 ---
@@ -472,7 +511,7 @@ private fun DailyStepsDialog(dailySteps: List<Pair<String, Long>>, onDismiss: ()
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("閉じる") }
+            TextButton(onClick = onDismiss) { Text("OK") }
         }
     )
 }
