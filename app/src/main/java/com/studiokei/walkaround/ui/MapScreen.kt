@@ -67,11 +67,14 @@ fun MapScreen(
             cameraPositionState = cameraPositionState
         ) {
             if (track.isNotEmpty()) {
-                Polyline(
-                    points = track,
-                    color = Color(0xFF006400), // DarkGreen (濃緑色)
-                    width = 10f
-                )
+                // ポリラインは2点以上ないと描画できない
+                if (track.size > 1) {
+                    Polyline(
+                        points = track,
+                        color = Color(0xFF006400), // DarkGreen (濃緑色)
+                        width = 10f
+                    )
+                }
 
                 // スタート地点に青い丸のマーク
                 Marker(
@@ -80,12 +83,14 @@ fun MapScreen(
                     title = "スタート"
                 )
 
-                // 最後の地点に赤い丸のマーク
-                Marker(
-                    state = MarkerState(position = track.last()),
-                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
-                    title = "ゴール"
-                )
+                // 最後の地点に赤い丸のマーク (点が1つしかない場合はこれがゴールになる)
+                if (track.size > 1) {
+                    Marker(
+                        state = MarkerState(position = track.last()),
+                        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED),
+                        title = "ゴール"
+                    )
+                }
             }
         }
         if (isLoading) {
