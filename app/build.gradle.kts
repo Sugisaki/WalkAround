@@ -17,8 +17,8 @@ android {
         applicationId = "com.studiokei.walkaround"
         minSdk = 28
         targetSdk = 36
-        versionCode = 6
-        versionName = "6.0"
+        versionCode = 7
+        versionName = "7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
