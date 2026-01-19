@@ -222,7 +222,8 @@ fun SectionBlock(
             )
 
             // 住所リスト
-            group.addresses.forEachIndexed { index, record ->
+            // ViewModelでフィルタリング済みのリストを新しい順に表示
+            group.addresses.reversed().forEachIndexed { index, record ->
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = DateTimeFormatUtils.dateTimeFormatter.format(Instant.ofEpochMilli(record.time)),
