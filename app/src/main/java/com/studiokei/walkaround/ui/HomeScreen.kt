@@ -11,7 +11,6 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -59,7 +59,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -74,6 +73,9 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.studiokei.walkaround.data.database.AppDatabase
 import com.studiokei.walkaround.data.model.SectionSummary
 import com.studiokei.walkaround.ui.StepSensorManager.SensorMode
+import com.studiokei.walkaround.ui.components.getNeumorphicBg
+import com.studiokei.walkaround.ui.components.NeumorphicButton
+import com.studiokei.walkaround.ui.components.NeumorphicSurface
 import com.studiokei.walkaround.util.DateTimeFormatUtils
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -235,7 +237,10 @@ fun HomeScreen(
         )
     }
 
-    Scaffold(modifier = modifier) { innerPadding ->
+    Scaffold(
+        modifier = modifier,
+        containerColor = getNeumorphicBg()
+    ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -249,94 +254,93 @@ fun HomeScreen(
             }
 
             item {
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(32.dp))
             }
 
             // スタート／ストップボタン
             item {
                 val isRunning = uiState.isRunning
-                val buttonText = if (isRunning) "ストップ" else "スタート"
+                val buttonText = if (isRunning) "STOP" else "START"
                 val onClickAction = if (isRunning) {
                     { homeViewModel.requestStopTracking() }
                 } else {
                     { handleStartClick() }
                 }
 
-                Button(
+                NeumorphicButton(
                     onClick = onClickAction,
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(50.dp),
-                    contentPadding = PaddingValues(0.dp),
-                    shape = RoundedCornerShape(24.dp) // 角丸
+                    modifier = Modifier.size(160.dp),
+                    shape = CircleShape
                 ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            buttonText,
-                            style = MaterialTheme.typography.headlineMedium
-                        )
-                    }
+                    Text(
+                        buttonText,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = if (isRunning) Color(0xFFE57373) else MaterialTheme.colorScheme.primary
+                    )
                 }
             }
+
             item {
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(48.dp))
             }
-            // 歩数記録確認ボタン（Android 10 以上）
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uiState.isFitnessApiAvailable) {
-                item {
-                    Button(
-                        onClick = {
-                            val permission = Manifest.permission.ACTIVITY_RECOGNITION
-                            if (context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                homeViewModel.fetchDailySteps()
-                                Log.d("HomeScreen", "Permission granted")
-                            } else {
-                                activityRecognitionPermissionLauncher.launch(permission)
-                                Log.e("HomeScreen", "Permission not granted")
-                            }
-                        },
-                    ) {
-                        Text("歩数記録を表示")
+
+            // サブボタン群
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    // 歩数記録確認ボタン（Android 10 以上）
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uiState.isFitnessApiAvailable) {
+                        NeumorphicButton(
+                            onClick = {
+                                val permission = Manifest.permission.ACTIVITY_RECOGNITION
+                                if (context.checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                    homeViewModel.fetchDailySteps()
+                                } else {
+                                    activityRecognitionPermissionLauncher.launch(permission)
+                                }
+                            },
+                            modifier = Modifier.size(120.dp, 60.dp)
+                        ) {
+                            Text("歩数記録", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
-                }
-            }
-            item {
-                Spacer(modifier = Modifier.height(18.dp))
-            }
-            // 住所表示ボタン
-            item {
-                Button(onClick = { handleFetchAddressClick() }) {
-                    Text("住所を表示")
+
+                    // 住所確認ボタン
+                    NeumorphicButton(
+                        onClick = { handleFetchAddressClick() },
+                        modifier = Modifier.size(120.dp, 60.dp)
+                    ) {
+                        Text("住所確認", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
 
             // 走行中の住所表示
             if (uiState.isRunning) {
                 item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Spacer(modifier = Modifier.height(24.dp))
+                    NeumorphicSurface(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        uiState.displayAddress?.let { address ->
-                            Text(
-                                text = address,
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        uiState.displayFeatureName?.let { featureName ->
-                            Text(
-                                text = featureName,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                textAlign = TextAlign.Center
-                            )
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            uiState.displayAddress?.let { address ->
+                                Text(text = address, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            uiState.displayFeatureName?.let { featureName ->
+                                Text(
+                                    text = featureName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 }
@@ -385,10 +389,8 @@ fun HomeScreen(
     // 削除完了ダイアログ
     if (uiState.showDeleteDoneDialog) {
         LaunchedEffect(uiState.showDeleteDoneDialog) {
-            if (uiState.showDeleteDoneDialog) {
-                kotlinx.coroutines.delay(1000)
-                homeViewModel.dismissDeleteDoneDialog()
-            }
+            kotlinx.coroutines.delay(1000)
+            homeViewModel.dismissDeleteDoneDialog()
         }
         DeleteDoneDialog(onDismiss = { homeViewModel.dismissDeleteDoneDialog() })
     }
@@ -396,10 +398,8 @@ fun HomeScreen(
     // 走行停止確認ダイアログ
     if (uiState.showStopConfirmDialog) {
         LaunchedEffect(uiState.showStopConfirmDialog) {
-            if (uiState.showStopConfirmDialog) {
-                kotlinx.coroutines.delay(10000)
-                homeViewModel.cancelStopTracking()
-            }
+            kotlinx.coroutines.delay(10000)
+            homeViewModel.cancelStopTracking()
         }
         StopConfirmDialog(
             onConfirm = { homeViewModel.confirmStopTracking() },
@@ -409,190 +409,31 @@ fun HomeScreen(
 }
 
 @Composable
-private fun StopConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("走行の停止") },
-        text = { Text("本当に走行を停止しますか？") },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Red,
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(8.dp)
-            ) { Text("ストップ", fontWeight = FontWeight.Bold) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("キャンセル") }
-        }
-    )
-}
-
-// --- ダイアログや複雑なコンポーネントを別Composableに分割 ---
-
-@Composable
-private fun GpsDisabledDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("位置情報が無効です") },
-        text = { Text("位置情報を利用するには、端末の設定で位置情報サービスを有効にしてください。") },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text("設定を開く") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("キャンセル") }
-        }
-    )
-}
-
-@Composable
-private fun GpsLostDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("記録を停止しました") },
-        text = { Text("GPSがオフになったため、記録を自動的に停止しました。") },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("OK") }
-        }
-    )
-}
-
-@Composable
-private fun AddressDialog(address: String?, featureName: String?, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("現在地の住所") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = address ?: "住所を取得中...",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                if (!featureName.isNullOrBlank()) {
-                    Text(
-                        text = featureName,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("OK") }
-        }
-    )
-}
-
-@Composable
-private fun DailyStepsDialog(dailySteps: List<Pair<String, Long>>, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("過去7日間の歩数記録") },
-        text = {
-            if (dailySteps.isEmpty()) {
-                Text("記録がありません。")
-            } else {
-                LazyColumn {
-                    items(dailySteps) { (date, steps) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = date)
-                            Text(text = "$steps 歩", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("OK") }
-        }
-    )
-}
-
-@Composable
-private fun DeleteConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("セクションの削除") },
-        text = { Text("このセクションを削除しますか？\nこの操作は元に戻せません。") },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
-            ) { Text("削除") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("キャンセル") }
-        }
-    )
-}
-
-@Composable
-private fun DeleteDoneDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("削除完了") },
-        text = { Text("セクションを削除しました。") },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("OK") }
-        }
-    )
-}
-
-@Composable
 private fun CurrentStatusCard(uiState: HomeUiState) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-
         if (uiState.sensorMode != SensorMode.UNAVAILABLE) {
-            if (uiState.isRunning) {
-                Text(text = "現在の歩数", style = MaterialTheme.typography.titleMedium)
-                Text(text = "${uiState.currentStepCount}", style = MaterialTheme.typography.displayLarge)
-                Spacer(modifier = Modifier.height(8.dp))
-                val sensorText = when (uiState.sensorMode) {
-                    SensorMode.COUNTER -> "取得方法: 歩数カウンター (ハードウェア)"
-                    SensorMode.DETECTOR -> "取得方法: 歩数検出器 (ハードウェア)"
-                    SensorMode.UNAVAILABLE -> "取得方法: 利用不可"
-                }
-                Text(
-                    text = sensorText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            } else {
-                Text(text = "本日の歩数", style = MaterialTheme.typography.titleMedium)
-                val displaySteps = uiState.todayStepCount.toLong()
-                Text(text = "$displaySteps", style = MaterialTheme.typography.displayLarge)
-                Spacer(modifier = Modifier.height(8.dp))
-                }
-        }
-
-        if (uiState.isRunning) {
-            Text(text = "現在の位置情報の数: ${uiState.currentTrackPointCount}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(top = 8.dp)
+            Text(
+                text = if (uiState.isRunning) "Current Steps" else "Today's Steps",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color.Gray
             )
+            
+            NeumorphicSurface(
+                modifier = Modifier.size(200.dp).padding(16.dp),
+                shape = CircleShape,
+                elevation = 8.dp
+            ) {
+                Text(
+                    text = "${if (uiState.isRunning) uiState.currentStepCount else uiState.todayStepCount.toLong()}",
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
 
-
-/**
- * 横スワイプで削除ボタンを表示できるセクションカード。
- *
- * @param sectionSummary 表示するセクションの概要データ。
- * @param displayUnit 距離の表示単位 ("km" または "mile")。
- * @param onDelete 削除ボタンがクリックされたときのコールバック。
- * @param onClick カード本体がクリックされたときのコールバック。
- */
 @Composable
 private fun SwipeableSectionCard(
     sectionSummary: SectionSummary,
@@ -674,7 +515,6 @@ private fun SwipeableSectionCard(
                 }
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                // ここに元のCardの内容をコピー
                 Column(modifier = Modifier.padding(12.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -773,4 +613,92 @@ private fun SwipeableSectionCard(
             }
         }
     }
+}
+
+// --- ダイアログ ---
+
+@Composable
+private fun StopConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("走行の停止") },
+        text = { Text("本当に走行を停止しますか？") },
+        confirmButton = {
+            Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("ストップ") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("キャンセル") }
+        }
+    )
+}
+
+@Composable
+private fun GpsDisabledDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("位置情報が無効です") },
+        text = { Text("位置情報を利用するには、設定で位置情報サービスを有効にしてください。") },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("設定を開く") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } }
+    )
+}
+
+@Composable
+private fun GpsLostDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("記録停止") },
+        text = { Text("GPSロストにより記録を停止しました。") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
+    )
+}
+
+@Composable
+private fun AddressDialog(address: String?, featureName: String?, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("現在地") },
+        text = { Text("${address ?: ""}\n${featureName ?: ""}") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
+    )
+}
+
+@Composable
+private fun DailyStepsDialog(dailySteps: List<Pair<String, Long>>, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("過去7日間の歩数") },
+        text = {
+            LazyColumn {
+                items(dailySteps) { (date, steps) ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(date)
+                        Text("$steps 歩", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
+    )
+}
+
+@Composable
+private fun DeleteConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("削除") },
+        text = { Text("この記録を削除しますか？") },
+        confirmButton = { TextButton(onClick = onConfirm, colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)) { Text("削除") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } }
+    )
+}
+
+@Composable
+private fun DeleteDoneDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("完了") },
+        text = { Text("削除しました。") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
+    )
 }

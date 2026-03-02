@@ -22,4 +22,11 @@ object DateTimeFormatUtils {
      */
     val dateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss")
         .withZone(ZoneId.systemDefault())
+
+    /**
+     * 時刻のみのフォーマッタ。
+     * 表示例：「12:34:56」
+     */
+    val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+        .withZone(ZoneId.systemDefault())
 }

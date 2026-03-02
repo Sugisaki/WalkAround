@@ -1,0 +1,1 @@
+/Users/sugisaki/.gemini/GEMINI.md
