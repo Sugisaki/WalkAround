@@ -248,15 +248,6 @@ fun HomeScreen(
             contentPadding = PaddingValues(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 歩数・位置情報表示
-            item {
-                CurrentStatusCard(uiState)
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(32.dp))
-            }
-
             // スタート／ストップボタン
             item {
                 val isRunning = uiState.isRunning
@@ -346,6 +337,15 @@ fun HomeScreen(
                 }
             }
 
+            item {
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+
+            // 歩数・位置情報表示
+            item {
+                CurrentStatusCard(uiState)
+            }
+
             // 走行セクション
             if (!uiState.isRunning) {
                 item {
@@ -413,23 +413,16 @@ private fun CurrentStatusCard(uiState: HomeUiState) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (uiState.sensorMode != SensorMode.UNAVAILABLE) {
             Text(
-                text = if (uiState.isRunning) "Current Steps" else "Today's Steps",
+                text = if (uiState.isRunning) "歩数" else "今日の歩数",
                 style = MaterialTheme.typography.titleSmall,
                 color = Color.Gray
             )
-            
-            NeumorphicSurface(
-                modifier = Modifier.size(200.dp).padding(16.dp),
-                shape = CircleShape,
-                elevation = 8.dp
-            ) {
-                Text(
-                    text = "${if (uiState.isRunning) uiState.currentStepCount else uiState.todayStepCount.toLong()}",
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            Text(
+                text = "${if (uiState.isRunning) uiState.currentStepCount else uiState.todayStepCount.toLong()}",
+                style = MaterialTheme.typography.displayMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
