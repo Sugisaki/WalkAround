@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -25,6 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -261,10 +263,10 @@ fun SettingsScreen(
                 SettingCard {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("歩数間隔で記録:")
-                        Spacer(modifier = Modifier.weight(1f))
                         TextField(
                             value = uiState.stepInterval.toString(),
                             onValueChange = { newValue ->
@@ -272,7 +274,7 @@ fun SettingsScreen(
                                 settingsViewModel.updateStepInterval(interval)
                             },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(0.5f)
+                            modifier = Modifier.width(100.dp)
                         )
                     }
                 }
@@ -347,7 +349,10 @@ fun SettingCard(content: @Composable () -> Unit) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            content()
+            // カード内のテキストのデフォルトスタイルを一括指定
+            ProvideTextStyle(value = MaterialTheme.typography.bodyMedium) {
+                content()
+            }
         }
     }
 }
