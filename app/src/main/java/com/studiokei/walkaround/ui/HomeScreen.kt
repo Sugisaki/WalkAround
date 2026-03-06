@@ -419,7 +419,7 @@ private fun CurrentStatusCard(uiState: HomeUiState) {
             )
             Text(
                 text = "${if (uiState.isRunning) uiState.currentStepCount else uiState.todayStepCount.toLong()}",
-                style = MaterialTheme.typography.displayMedium,
+                style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -651,7 +651,22 @@ private fun AddressDialog(address: String?, featureName: String?, onDismiss: () 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("現在地") },
-        text = { Text("${address ?: ""}\n${featureName ?: ""}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = address ?: "住所を取得中...",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                if (!featureName.isNullOrBlank()) {
+                    Text(
+                        text = featureName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        },
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } }
     )
 }

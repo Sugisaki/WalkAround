@@ -27,11 +27,11 @@ import com.studiokei.walkaround.ui.theme.LocalIsDarkTheme
 // ライトテーマ用
 val NeumorphicLightBg = Color(0xFFEDF1F4)
 val NeumorphicLightLightShadow = Color.White
-val NeumorphicLightDarkShadow = Color(0xFFD1D9E6)
+val NeumorphicLightDarkShadow = Color(0xFFC0C8D0)
 
 // ダークテーマ用
 val NeumorphicDarkBg = Color(0xFF1B1B1F)
-val NeumorphicDarkLightShadow = Color(0xFF2E2E34)
+val NeumorphicDarkLightShadow = Color(0xFF404050)
 val NeumorphicDarkDarkShadow = Color(0xFF0E0E11)
 
 /**
